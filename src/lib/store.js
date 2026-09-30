@@ -87,6 +87,10 @@ export function logout() {
 export const DEMO_USER_BY_ROLE = { learner: "u-maya", instructor: "u-daniel", admin: "u-priya" };
 export const DEMO_EMAIL_BY_ROLE = { learner: "maya@workeasy360.dev", instructor: "daniel@workeasy360.dev", admin: "admin@workeasy360.dev" };
 export const DEMO_PASSWORD = "password123";
+// Demo entry points (one-click demo workspaces on the sign-in page, the `?as=<role>` shortcut) exist for local
+// development and the test suites. A deployment that sets `window.WE360_API_BASE` hides them unless it also sets
+// `window.WE360_DEMO = true`.
+export const DEMO_ENABLED = typeof window === "undefined" ? true : window.WE360_DEMO ?? !window.WE360_API_BASE;
 
 // ---- real backend auth ----
 // Signs in against the Java backend (backend/) and keeps the existing localStorage session in lock-step, using

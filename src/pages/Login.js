@@ -4,7 +4,7 @@ import { icon as ico } from "../lib/icons.js";
 import { Avatar } from "../components/Badge.js";
 import { Button } from "../components/Button.js";
 import { Field, Input } from "../components/Form.js";
-import { login, DEMO_USER_BY_ROLE, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, loginReal } from "../lib/store.js";
+import { login, DEMO_USER_BY_ROLE, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, DEMO_ENABLED, loginReal } from "../lib/store.js";
 import { userById } from "../services/people.js";
 import { navigate } from "../router.js";
 
@@ -55,11 +55,12 @@ export function LoginPage(root) {
     h("div", { class: "login-inner" }, [
       h("div", { class: "row", style: "justify-content:center;margin-bottom:24px" }, [h("span", { class: "brand-mark", style: "width:44px;height:44px;border-radius:13px" }, ico("zap", 24)), h("span", { class: "brand-name", style: "font-size:26px;font-weight:800;letter-spacing:-0.02em" }, ["WorkEasy", h("b", { style: "color:var(--c-primary)" }, "360")])]),
       h("h1", { class: "center", id: "page-title", tabindex: "-1" }, "What should you do next?"),
-      h("p", { class: "muted center", style: "margin:10px auto 24px;max-width:520px" }, "A learning platform that guides you. Sign in with your account, or explore a demo workspace."),
+      h("p", { class: "muted center", style: "margin:10px auto 24px;max-width:520px" }, DEMO_ENABLED ? "A learning platform that guides you. Sign in with your account, or explore a demo workspace." : "A learning platform that guides you. Sign in with your account."),
       form,
-      h("p", { class: "eyebrow center", style: "margin-bottom:12px" }, "Demo workspaces"),
-      h("div", { class: "grid grid-3 login-grid" }, cards),
-      h("p", { class: "xs muted center", style: "margin-top:24px" }, "Demo workspaces use the seeded demo accounts; they are unavailable where demo data is not installed."),
+      // Demo workspaces only where demo mode is on (local development, tests) — never on a production deployment.
+      DEMO_ENABLED && h("p", { class: "eyebrow center", style: "margin-bottom:12px" }, "Demo workspaces"),
+      DEMO_ENABLED && h("div", { class: "grid grid-3 login-grid", "data-demo-workspaces": "" }, cards),
+      DEMO_ENABLED && h("p", { class: "xs muted center", style: "margin-top:24px" }, "Demo workspaces use the seeded demo accounts; they are unavailable where demo data is not installed."),
     ]),
   ]));
 }

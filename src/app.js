@@ -1,5 +1,5 @@
 import { route, notFound, startRouter, navigate, refreshRoute, currentRoute } from "./router.js";
-import { getUser, login, DEMO_USER_BY_ROLE, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, loginReal, isBackendOnline } from "./lib/store.js";
+import { getUser, login, DEMO_USER_BY_ROLE, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, DEMO_ENABLED, loginReal, isBackendOnline } from "./lib/store.js";
 import { bus } from "./lib/events.js";
 import { hydrateMyCourses, hydrateCatalog } from "./services/courseSync.js";
 import { hydrateMyLearning } from "./services/learningSync.js";
@@ -154,7 +154,7 @@ const notFoundPage = () => ({
 
 // Demo shortcut: index.html?as=instructor signs in as that role (handy for demos and automated checks).
 const asRole = new URLSearchParams(location.search).get("as");
-if (asRole && DEMO_USER_BY_ROLE[asRole]) {
+if (DEMO_ENABLED && asRole && DEMO_USER_BY_ROLE[asRole]) {
   login(DEMO_USER_BY_ROLE[asRole]); // instant local session so the app boots even if the backend is down
   loginReal(DEMO_EMAIL_BY_ROLE[asRole], DEMO_PASSWORD).catch((err) => console.warn("[boot] backend unavailable:", err.message));
 }

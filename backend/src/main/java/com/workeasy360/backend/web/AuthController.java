@@ -55,6 +55,8 @@ public class AuthController {
 
     @GetMapping("/me")
     public UserDto me(@AuthenticationPrincipal CurrentUser principal) {
+        // /api/auth/** is public so login/register work without a token; this one endpoint needs a signed-in user.
+        if (principal == null) throw new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Sign in to continue");
         User u = users.findById(principal.getId()).orElseThrow(() -> ApiException.notFound("User"));
         return UserDto.of(u);
     }
