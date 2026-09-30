@@ -1,0 +1,71 @@
+# ---- secrets and local environment (never commit) ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+secrets/
+
+# ---- backend build output and runtime data ----
+backend/target/
+backend/data/
+backend/storage/
+*.mv.db
+*.trace.db
+*.jar
+*.war
+*.class
+
+# ---- local portable tooling and database cluster (only env.sh is source) ----
+tools/*
+!tools/env.sh
+
+# ---- database dumps ----
+*.dump
+*.sql.gz
+*.backup
+
+# ---- test / regression output and browser artifacts ----
+tests/last-run.log
+tests/regression-result.txt
+tests/**/*.png
+*.runner.log
+rtprof*/
+prof_*/
+screenshots/
+playwright-report/
+test-results/
+
+# ---- logs and temporary files ----
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+nohup.out
+hs_err_pid*
+
+# ---- dependency folders (none are used today) ----
+node_modules/
+
+# ---- assistant / session artifacts ----
+.claude/
+scratchpad/
+
+# ---- editors / OS ----
+.idea/
+.vscode/
+*.iml
+.project
+.classpath
+.settings/
+.DS_Store
+Thumbs.db
+desktop.ini

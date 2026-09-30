@@ -1,0 +1,23 @@
+# Real PostgreSQL for when Docker is available. Until then, the default `dev` profile uses a zero-install,
+# file-persistent H2 database in PostgreSQL-compatibility mode (see src/main/resources/application.yml) —
+# same JPA entities, same Flyway migrations, so switching later is just `-Dspring-boot.run.profiles=postgres`.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: we360
+      POSTGRES_USER: we360
+      POSTGRES_PASSWORD: we360
+    ports:
+      - "5432:5432"
+    volumes:
+      - we360_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U we360"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  we360_pgdata:

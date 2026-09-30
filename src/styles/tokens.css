@@ -1,0 +1,85 @@
+/* WorkEasy360 design tokens */
+:root {
+  --c-bg: #f5f6fb;
+  --c-surface: #ffffff;
+  --c-surface-2: #f9fafd;
+  --c-border: #e4e7f0;
+  --c-border-strong: #cdd2e0;
+  --c-text: #12141c;
+  --c-text-2: #454b5e;
+  --c-muted: #5d6479;
+
+  --c-primary: #4f46e5;
+  --c-primary-hover: #4338ca;
+  --c-primary-press: #3730a3;
+  --c-primary-soft: #eef0ff;
+  --c-primary-ink: #3730a3;
+
+  --c-teal: #0d8f8b;
+  --c-teal-soft: #e1f6f5;
+  --c-success: #0f7a55;
+  --c-success-soft: #e0f5ec;
+  --c-warning: #a8560a;
+  --c-warning-soft: #fff1dc;
+  --c-danger: #c2262e;
+  --c-danger-soft: #fdecec;
+  --c-info: #1d6fd1;
+  --c-info-soft: #e5f0fd;
+
+  --c-focus: #4f46e5;
+  --c-scrim: rgba(12, 14, 30, 0.46);
+
+  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+  --fs-3xl: 32px;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+  --r-full: 999px;
+
+  --sh-1: 0 1px 2px rgba(18, 20, 40, 0.06);
+  --sh-2: 0 4px 14px rgba(18, 20, 40, 0.08);
+  --sh-3: 0 16px 40px rgba(18, 20, 40, 0.16);
+
+  --t-micro: 180ms;
+  --t-panel: 380ms;
+  --t-moment: 800ms;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --sidebar-w: 248px;
+  --sidebar-w-compact: 68px;
+  --topbar-h: 64px;
+  --guide-w: clamp(340px, 33.333vw, 500px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-micro: 0.01ms;
+    --t-panel: 0.01ms;
+    --t-moment: 0.01ms;
+  }
+}
+
+/* Honour reduced-motion for every keyframe / transition, not just tokenised ones */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

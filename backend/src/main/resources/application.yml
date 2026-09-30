@@ -1,0 +1,95 @@
+# Default profile = local, zero-install dev: H2 file database in PostgreSQL-compatibility mode.
+# Switch to real PostgreSQL any time with:  mvn spring-boot:run -Dspring-boot.run.profiles=postgres
+# (see docker-compose.yml — `docker compose up -d` brings up real Postgres on 5432).
+spring:
+  application:
+    name: workeasy360-backend
+  profiles:
+    active: ${APP_PROFILE:dev}
+  jackson:
+    default-property-inclusion: non_null
+  servlet:
+    multipart:
+      max-file-size: ${MAX_VIDEO_MB:500}MB
+      max-request-size: ${MAX_VIDEO_MB:500}MB
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: always
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:}                 # required (no default). dev profile only: a random per-run key is generated when unset
+    expiry-minutes: ${JWT_EXPIRY_MINUTES:720}
+  storage:
+    root: ${FILE_STORAGE_PATH:./storage}
+  video:
+    max-mb: ${MAX_VIDEO_MB:500}
+  seed:
+    enabled: ${APP_SEED_ENABLED:false}     # demo accounts/courses with a published demo password: opt-in (the dev profile turns it on)
+  ai:
+    enabled: ${AI_ENABLED:false}            # false → deterministic mock provider (no network, no key needed)
+    provider: ${AI_PROVIDER:mock}          # mock | openai | anthropic
+    api-key: ${AI_API_KEY:}                # never persisted or exposed
+    model: ${AI_MODEL:}
+    base-url: ${AI_BASE_URL:}              # optional OpenAI-compatible gateway / proxy
+    timeout-seconds: ${AI_TIMEOUT_SECONDS:60}
+    max-input-chars: ${AI_MAX_INPUT_CHARS:12000}
+    max-output-tokens: ${AI_MAX_OUTPUT_TOKENS:4000}
+    max-questions: ${AI_MAX_QUESTIONS:25}
+    dedupe-minutes: ${AI_DEDUPE_MINUTES:10}
+  payments:
+    provider: ${PAYMENTS_PROVIDER:none}       # none (purchases refused safely) | mock (development only, needs mock-allowed) | a future real provider
+    mock-allowed: ${PAYMENTS_MOCK_ALLOWED:false}
+    api-key: ${PAYMENTS_API_KEY:}              # for a real provider; never persisted or exposed
+    webhook-secret: ${PAYMENTS_WEBHOOK_SECRET:}
+    currency: ${PAYMENTS_CURRENCY:INR}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+
+springdoc:
+  swagger-ui:
+    path: /docs
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:h2:file:./data/we360;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;NON_KEYWORDS=VALUE,USER
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+app:
+  seed:
+    enabled: ${APP_SEED_ENABLED:true}       # zero-install dev: seed the demo data on an empty database
+
+---
+spring:
+  config:
+    activate:
+      on-profile: postgres
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:we360}
+    username: ${DB_USERNAME:we360}
+    password: ${DB_PASSWORD:we360}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
