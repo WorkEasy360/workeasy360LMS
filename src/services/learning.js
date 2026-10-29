@@ -311,7 +311,8 @@ export function verifyCertificate(code) {
 export async function verifyCertificateRemote(code) {
   try {
     const c = await api.verifyCertificate(String(code).trim());
-    const cert = { id: c.certificateNumber, userId: c.userId, courseId: c.courseId, issuedAt: new Date(c.issuedAt).getTime(), expiresAt: c.expiresAt ? new Date(c.expiresAt).getTime() : null, revoked: c.status === "REVOKED" };
+    const cert = { id: c.certificateNumber, userId: c.userId, courseId: c.courseId, issuedAt: new Date(c.issuedAt).getTime(), expiresAt: c.expiresAt ? new Date(c.expiresAt).getTime() : null, revoked: c.status === "REVOKED",
+      recipientName: c.recipientName, courseTitle: c.courseTitle, instructorName: c.instructorName, issuer: c.issuer };
     return { cert, status: c.status.toLowerCase(), user: userById(c.userId), course: getCourse(c.courseId), source: "backend" };
   } catch (err) {
     if (err?.status === 404) return null;

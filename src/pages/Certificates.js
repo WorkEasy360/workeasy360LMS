@@ -11,22 +11,77 @@ import { openModal, toast, confirmDialog } from "../components/Overlay.js";
 import { certificatesFor, allCertificates, certStatus, verifyCertificateRemote, renewCertificate } from "../services/learning.js";
 import { LoadingState } from "../components/States.js";
 import { getCourse, courseTitle } from "../services/courses.js";
-import { userById } from "../services/people.js";
+import { userById, settings } from "../services/people.js";
 import { save } from "../lib/store.js";
 import { navigate } from "../router.js";
+import { BRAND_IMAGES } from "../components/Brand.js";
+import qrcode from "../lib/vendor/qrcode.js";
 
+const longDate = (ts) => new Date(ts).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+
+/** QR code (navy modules, white quiet zone) that opens this certificate's public verification page. */
+function qrSvg(text) {
+  const qr = qrcode(0, "M");
+  qr.addData(text); qr.make();
+  const n = qr.getModuleCount();
+  let d = "";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
+  return `<svg viewBox="-4 -4 ${n + 8} ${n + 8}" shape-rendering="crispEdges" aria-hidden="true"><rect x="-4" y="-4" width="${n + 8}" height="${n + 8}" fill="#fff"/><path d="${d}" fill="#13222E"/></svg>`;
+}
+
+/** Gold seal with the WorkEasy360 "W" mark and green ribbon tails. */
+let sealSeq = 0;
+function sealSvg() {
+  const id = `cert-seal-${++sealSeq}`;
+  const star = Array.from({ length: 64 }, (_, i) => { const a = (Math.PI * 2 * i) / 64 - Math.PI / 2, r = i % 2 ? 86 : 95; return `${(100 + r * Math.cos(a)).toFixed(1)},${(100 + r * Math.sin(a)).toFixed(1)}`; }).join(" ");
+  return `<svg viewBox="0 0 200 250" aria-hidden="true">
+    <defs>
+      <linearGradient id="${id}-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F6E3A1"/><stop offset=".5" stop-color="#D4AF37"/><stop offset="1" stop-color="#A67C1A"/></linearGradient>
+      <path id="${id}-ring" d="M43,100 a57,57 0 1,1 114,0 a57,57 0 1,1 -114,0"/>
+    </defs>
+    <path d="M66 150 L46 238 L70 224 L86 246 L104 166 Z" fill="#008F49"/>
+    <path d="M134 150 L154 238 L130 224 L114 246 L96 166 Z" fill="#00BF62"/>
+    <polygon points="${star}" fill="url(#${id}-gold)"/>
+    <circle cx="100" cy="100" r="78" fill="#13222E"/>
+    <circle cx="100" cy="100" r="73" fill="none" stroke="url(#${id}-gold)" stroke-width="1.6"/>
+    <circle cx="100" cy="100" r="46" fill="none" stroke="url(#${id}-gold)" stroke-width="1.6"/>
+    <text font-family="Cinzel, Georgia, serif" font-size="11.5" font-weight="700" fill="#F6E3A1"><textPath href="#${id}-ring" textLength="350" lengthAdjust="spacing">WORKEASY360 • CERTIFIED • VERIFIED •</textPath></text>
+    <circle cx="100" cy="100" r="42" fill="#fff"/>
+    <image href="${BRAND_IMAGES.mark}" x="70" y="70" width="60" height="60"/>
+  </svg>`;
+}
+
+/** The printable certificate (A4 landscape). Names come from the backend, so it reads correctly on any device. */
 export function CertificateView(cert) {
   const user = userById(cert.userId), course = getCourse(cert.courseId), status = certStatus(cert);
-  return h("div", { class: ["cert", (status === "expired" || status === "revoked") && "is-expired"] }, [
-    h("div", { class: "eyebrow" }, "WorkEasy360 · Certificate of completion"),
-    h("div", { class: "small muted", style: "margin-top:10px" }, "This certifies that"),
-    h("div", { class: "cert-name" }, user?.name),
-    h("div", { class: "small muted" }, "has successfully completed"),
-    h("h2", { style: "margin:6px 0 14px;font-size:clamp(18px,2.6vw,26px)" }, courseTitle(course || { title: "Course" })),
-    h("span", { class: "cert-seal" }, ico("award", 30)),
-    h("div", { class: "row wrap xs muted", style: "justify-content:center;margin-top:14px;gap:6px 18px" }, [`Issued ${fmtDate(cert.issuedAt)}`, cert.expiresAt ? `${status === "expired" ? "Expired" : "Valid until"} ${fmtDate(cert.expiresAt)}` : "No expiry", `ID ${cert.id}`]),
-    status === "revoked" && h("div", { class: "badge badge-danger", style: "margin-top:8px" }, "Revoked"),
-  ]);
+  const name = cert.recipientName || user?.name || "";
+  const title = cert.courseTitle || courseTitle(course || { title: "Course" });
+  const instructor = cert.instructorName || (course?.instructorId && userById(course.instructorId)?.name) || null;
+  const issuer = cert.issuer || settings()?.orgName || null;
+  const verifyHash = `#/verify/${encodeURIComponent(cert.id)}`;
+  const inactive = status === "expired" || status === "revoked";
+  const meta = [`Awarded on ${longDate(cert.issuedAt)}${issuer ? ` by ${issuer}` : ""}`, cert.expiresAt && `${status === "expired" ? "Expired" : "Valid until"} ${longDate(cert.expiresAt)}`].filter(Boolean).join("  ·  ");
+  return h("div", { class: "cert-scroll" }, h("article", { class: ["cert", inactive && "is-expired"], "aria-label": `Certificate of completion awarded to ${name} for ${title}`, "data-cert": cert.id }, h("div", { class: "cert-frame" }, [
+    ...["tl", "tr", "bl", "br"].map((p) => h("span", { class: `cert-corner cert-corner-${p}`, "aria-hidden": "true" })),
+    h("img", { class: "cert-watermark", src: BRAND_IMAGES.mark, alt: "" }),
+    h("img", { class: "cert-logo", src: BRAND_IMAGES.logo, alt: "WorkEasy360" }),
+    h("div", { class: "cert-title" }, "Certificate"),
+    h("div", { class: "cert-subtitle" }, "of Completion"),
+    h("div", { class: "cert-presented" }, "This is to certify that"),
+    h("div", { class: "cert-name", "data-cert-name": "" }, name),
+    h("div", { class: "cert-text" }, "has successfully completed the course"),
+    h("div", { class: "cert-course", "data-cert-course": "" }, title),
+    h("div", { class: "cert-meta" }, meta),
+    h("div", { class: "cert-foot" }, [
+      h("div", { class: "cert-verify" }, [
+        h("a", { class: "cert-qr", href: verifyHash, "aria-label": "Verify this certificate online", html: qrSvg(`${location.origin}${location.pathname}${verifyHash}`), "data-cert-qr": "" }),
+        h("div", {}, [h("div", { class: "cert-label" }, "Certificate ID"), h("div", { class: "cert-id" }, cert.id), h("div", { class: "cert-label", style: "margin-top:0.6cqw" }, "Verify at"), h("div", { class: "cert-url" }, `${location.host}/${verifyHash}`)]),
+      ]),
+      h("div", { class: "cert-seal", html: sealSvg() }),
+      h("div", { class: "cert-sign" }, [h("div", { class: "cert-signature" }, instructor || issuer || "WorkEasy360"), h("div", { class: "cert-sign-line" }), h("div", { class: "cert-label" }, instructor ? "Course Instructor" : "Authorised Signatory")]),
+    ]),
+    inactive && h("div", { class: "cert-stamp", "data-cert-stamp": status }, status === "revoked" ? "Revoked" : "Expired"),
+  ])));
 }
 
 export function openCertificate(cert) {
@@ -44,7 +99,7 @@ export function openCertificate(cert) {
 function certTile(cert, { onRenew } = {}) {
   const course = getCourse(cert.courseId), status = certStatus(cert);
   return h("div", { class: "card card-pad stack-sm" }, [
-    h("div", { class: "row-between" }, [h("div", { class: "row-sm" }, [h("span", { class: "icon-tile" }, ico("award", 20)), h("div", {}, [h("h3", {}, courseTitle(course || { title: "Course" })), h("div", { class: "xs muted" }, `Issued ${fmtDate(cert.issuedAt)}`)])]), StatusBadge(status)]),
+    h("div", { class: "row-between" }, [h("div", { class: "row-sm" }, [h("span", { class: "icon-tile" }, ico("award", 20)), h("div", {}, [h("h3", {}, cert.courseTitle || courseTitle(course || { title: "Course" })), h("div", { class: "xs muted" }, `Issued ${fmtDate(cert.issuedAt)}`)])]), StatusBadge(status)]),
     h("div", { class: "small muted" }, cert.expiresAt ? `${status === "expired" ? "Expired" : "Expires"} ${fmtDate(cert.expiresAt)}` : "Never expires"),
     h("div", { class: "xs muted", style: "font-family:var(--font-mono)" }, cert.id),
     h("div", { class: "row wrap" }, [Button({ label: "View", icon: "eye", size: "sm", onClick: () => openCertificate(cert) }), (status === "expiring" || status === "expired") && course?.certExpiryMonths ? Button({ label: "Renew", icon: "refresh", size: "sm", variant: "primary", onClick: () => onRenew?.(cert) }) : null]),
@@ -73,8 +128,8 @@ export function CertificationsAdminPage() {
       h("tbody", {}, rows.map((c) => {
         const u = userById(c.userId), s = certStatus(c);
         return h("tr", {}, [
-          h("td", {}, h("div", { class: "row-sm" }, [Avatar(u, "sm"), h("div", {}, [h("div", { class: "strong" }, u?.name), h("div", { class: "xs muted" }, u?.dept)])])),
-          h("td", {}, courseTitle(getCourse(c.courseId) || { title: "" })), h("td", {}, fmtDate(c.issuedAt)), h("td", {}, c.expiresAt ? fmtDate(c.expiresAt) : "—"), h("td", {}, StatusBadge(s)),
+          h("td", {}, h("div", { class: "row-sm" }, [Avatar(u, "sm"), h("div", {}, [h("div", { class: "strong" }, u?.name || c.recipientName), h("div", { class: "xs muted" }, u?.dept)])])),
+          h("td", {}, c.courseTitle || courseTitle(getCourse(c.courseId) || { title: "" })), h("td", {}, fmtDate(c.issuedAt)), h("td", {}, c.expiresAt ? fmtDate(c.expiresAt) : "—"), h("td", {}, StatusBadge(s)),
           h("td", {}, h("div", { class: "row-sm", style: "justify-content:flex-end" }, [
             Button({ label: "View", size: "sm", variant: "ghost", onClick: () => openCertificate(c) }),
             (s === "expiring" || s === "expired") && Button({ label: "Remind", size: "sm", onClick: () => toast(`Reminder sent to ${u?.name}`) }),

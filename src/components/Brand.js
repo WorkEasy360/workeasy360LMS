@@ -6,6 +6,7 @@ export const PRODUCT_NAME = "WorkEasy360 LMS";
 const PRODUCT_SUFFIX = "LMS";
 const ASSETS = "/src/assets/brand/";
 export const AGENT_LOGO = ASSETS + "agent-logo.png";
+export const BRAND_IMAGES = { logo: ASSETS + "workeasy360-logo.png", logoWhite: ASSETS + "workeasy360-logo-white.png", mark: ASSETS + "workeasy360-mark.png" };
 /** Width ÷ height of the trimmed logo artwork (742 × 120). */
 const LOGO_ASPECT = 742 / 120;
 /** In the artwork the wordmark's baseline sits at 77.5% of the image height; `nudge` lines the product name up with it. */
@@ -22,14 +23,14 @@ export function ProductLogo({ tone = "light", layout = "inline", size = "md", de
     ? `font-size:${STACKED[size].text}px;margin-top:${Math.round(logoH * 0.14)}px;margin-left:${Math.round(logoW * WORDMARK_START)}px`
     : `font-size:${INLINE[size].text}px;margin-top:${INLINE[size].nudge}px`;
   return h("span", { class: ["product-logo", `tone-${tone}`, stacked && "is-stacked"], "data-brand": "product-logo", ...(decorative ? { "aria-hidden": "true" } : { role: "img", "aria-label": PRODUCT_NAME }), style: stacked ? null : `column-gap:${INLINE[size].gap}px` }, [
-    h("img", { src: ASSETS + (tone === "dark" ? "workeasy360-logo-white.png" : "workeasy360-logo.png"), alt: "", width: logoW, height: logoH, draggable: "false", style: `width:${logoW}px;height:${logoH}px` }),
+    h("img", { src: tone === "dark" ? BRAND_IMAGES.logoWhite : BRAND_IMAGES.logo, alt: "", width: logoW, height: logoH, draggable: "false", style: `width:${logoW}px;height:${logoH}px` }),
     h("span", { class: "product-logo-name", "aria-hidden": "true", style: nameStyle }, PRODUCT_SUFFIX),
   ]);
 }
 
 /** The "W" mark on its own (compact navigation). Leave `label` empty when nearby text already names the product. */
 export function ProductMark(size = 32, label = "", cls = "") {
-  return h("img", { class: ["product-mark", cls], src: ASSETS + "workeasy360-mark.png", alt: label, width: size, height: size, draggable: "false", "data-brand": "product-mark" });
+  return h("img", { class: ["product-mark", cls], src: BRAND_IMAGES.mark, alt: label, width: size, height: size, draggable: "false", "data-brand": "product-mark" });
 }
 
 /** The AI agent's artwork, decorative (the surrounding control or heading names the agent). */

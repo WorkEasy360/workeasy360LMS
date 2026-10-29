@@ -43,7 +43,7 @@ index.html ─ src/app.js (routes, session, hydration)          backend/ (Spring
                   first, background sync to the backend)          domain/     JPA entities   repo/ Spring Data repositories
    src/pages      screens      src/components  design system,     security/   JWT filter + service, CurrentUser
                   brand, floating AI agent (Agent.js)
-   src/assets     brand artwork (logo, mark, agent)
+   src/assets     brand artwork (logo, mark, agent)    src/lib/vendor  qrcode-generator (MIT) for certificate QR codes
    src/builder    content blocks, AI quiz panel                   resources/db/migration  Flyway V1…V7
    src/guide      in-product guide engine and guide definitions   storage/    uploaded videos (FILE_STORAGE_PATH)
    tests/         in-browser regression suites
@@ -166,6 +166,13 @@ The UI uses the WorkEasy360 palette shared with WorkEasy360 Booking, defined onc
 borders `#E1E7EB`, text `#17232D` / `#667581`. The official logo, the "W" mark (also the favicon) and the agent artwork
 are in `src/assets/brand/` (right-sized copies of the company artwork) and are rendered by `src/components/Brand.js`.
 
+**Certificates** (`CertificateView` in `src/pages/Certificates.js`) are A4 landscape: navy and gold frame, the official
+logo, "Certificate of Completion" (Cinzel), the recipient in script (Great Vibes), the course, the issuing organisation
+(Admin → Settings → organisation name), the course instructor's signature, a gold seal with the W mark, and a QR code that
+opens the public verification page (`#/verify/<ID>`). `GET /api/certificates` and the public
+`GET /api/certificates/verify/{number}` return `recipientName`, `courseTitle`, `instructorName` and `issuer`, so a
+certificate reads correctly on any device; no e-mail address is exposed. "Print / save PDF" prints one A4 landscape page.
+
 ## 7. Notifications and automation
 
 Notifications are stored on the backend (`notifications` table) and delivered in-app. Event rules run as things
@@ -214,7 +221,7 @@ provider and CORS without secrets.
 | --- | --- |
 | Backend compile | `cd backend && mvn -q -DskipTests compile` |
 | API smoke / security | curl against `/api/...` (401 without token, 403 for wrong role, 404/409 guards) |
-| Browser regression (69 suites) | `index.html?as=<role>&selftest=<suite>` — see below |
+| Browser regression (70 suites) | `index.html?as=<role>&selftest=<suite>` — see below |
 
 Browser suites live in `tests/` (`selftest.js` registers `suites_video.js`, `suites_skills.js`,
 `suites_analytics.js`, `suites_ai.js`, `suites_coach.js`, `suites_commerce.js`, `suites_agent.js`,
@@ -224,7 +231,7 @@ running backend, log to `tests/last-run.log` through the dev server's `/__log` e
 the demo data seeded, and Chrome. Run them **one at a time** (they share the log and the demo accounts):
 
 ```
-bash tests/run-regression.sh                        # all 69 suites, sequential; summary in tests/regression-result.txt
+bash tests/run-regression.sh                        # all 70 suites, sequential; summary in tests/regression-result.txt
 bash tests/run-regression.sh "instructor builder"   # selected suites
 CHROME="/path/to/chrome" BASE_URL=http://localhost:5173 bash tests/run-regression.sh
 ```
@@ -241,7 +248,7 @@ learnerguide, player, quiz, community, smoke, quizBackend, assignmentBackend, co
 certVerify, quizFresh, skillProgress, skillQuizEvidence, journey, skillsPersist, analyticsLearner, analyticsFunnel,
 analyticsAssessments, analyticsPersist, aiRbac, responsive (phone-width overflow check), signup, freeCourseAccess, paidCourseLock, purchaseFlow, purchaseFailures, coachContext, recommendations, recommendationFeedback,
 coachConversation, coachLessonContext, coachGrounding, coachRbac, coachValidation, learningPlan, coachPersist, agent
-(WorkEasy360 Assistant).
+(WorkEasy360 Assistant), certificate (printable certificate, names, QR code).
 Suites always run with `AI_ENABLED=false` (mock provider) — no external AI calls.
 
 ## 11. Guides

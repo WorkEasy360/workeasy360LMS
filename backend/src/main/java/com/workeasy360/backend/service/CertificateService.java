@@ -3,8 +3,13 @@ package com.workeasy360.backend.service;
 import com.workeasy360.backend.domain.Certificate;
 import com.workeasy360.backend.domain.Course;
 import com.workeasy360.backend.domain.Enums.CertificateStatus;
+import com.workeasy360.backend.domain.Settings;
+import com.workeasy360.backend.domain.User;
+import com.workeasy360.backend.dto.CertificateDtos.CertificateDto;
 import com.workeasy360.backend.repo.Repos.CertificateRepo;
 import com.workeasy360.backend.repo.Repos.CourseRepo;
+import com.workeasy360.backend.repo.Repos.UserRepo;
+import com.workeasy360.backend.repo.SettingsRepo;
 import com.workeasy360.backend.web.ApiException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,8 +17,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -23,11 +33,34 @@ public class CertificateService {
 
     private final CertificateRepo certificates;
     private final CourseRepo courses;
+    private final UserRepo users;
+    private final SettingsRepo settings;
 
-    public CertificateService(CertificateRepo certificates, CourseRepo courses) { this.certificates = certificates; this.courses = courses; }
+    public CertificateService(CertificateRepo certificates, CourseRepo courses, UserRepo users, SettingsRepo settings) {
+        this.certificates = certificates; this.courses = courses; this.users = users; this.settings = settings;
+    }
 
     public List<Certificate> forUser(String userId) { return certificates.findByUserId(userId); }
     public List<Certificate> all() { return certificates.findAll(); }
+
+    /** Certificates with recipient, course, instructor and issuing organisation resolved in bulk (one query per table). */
+    @Transactional(readOnly = true)
+    public List<CertificateDto> views(List<Certificate> list) {
+        Map<String, Course> courseById = courses.findAllById(list.stream().map(Certificate::getCourseId).distinct().toList()).stream()
+                .collect(Collectors.toMap(Course::getId, Function.identity()));
+        Set<String> userIds = new HashSet<>();
+        list.forEach(c -> userIds.add(c.getUserId()));
+        courseById.values().forEach(c -> userIds.add(c.getInstructorId()));
+        Map<String, String> names = users.findAllById(userIds).stream().collect(Collectors.toMap(User::getId, User::getName));
+        String issuer = settings.findById("singleton").map(Settings::getOrgName).orElse(null);
+        return list.stream().map(c -> {
+            Course course = courseById.get(c.getCourseId());
+            return CertificateDto.of(c, status(c).name(), names.get(c.getUserId()), course == null ? null : course.getTitle(),
+                    course == null ? null : names.get(course.getInstructorId()), issuer);
+        }).toList();
+    }
+
+    public CertificateDto view(Certificate c) { return views(List.of(c)).get(0); }
 
     public Certificate issueIfAbsent(String userId, String courseId) {
         Optional<Certificate> existing = certificates.findByUserIdAndCourseId(userId, courseId);

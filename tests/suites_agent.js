@@ -1,4 +1,4 @@
-// WorkEasy360 Assistant (floating AI agent) and WorkEasy360 brand (run one at a time: index.html?as=<role>&selftest=<suite>).
+// WorkEasy360 Assistant (floating AI agent), WorkEasy360 brand and the printable certificate (run one at a time: index.html?as=<role>&selftest=<suite>).
 // The agent talks to the Learning Coach backend, which runs on the deterministic mock provider (AI_ENABLED=false).
 import { loginReal, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, load } from "/src/lib/store.js";
 import { bus } from "/src/lib/events.js";
@@ -164,5 +164,50 @@ export function registerAgent({ suites, log, ok, sleep, q, click, type, waitFor,
       ok(Math.round(pr.width) === vw && pr.left >= 0 && doc.documentElement.scrollWidth <= vw + 1, `panel fills the phone screen without overflow (${Math.round(pr.width)}px of ${vw}px)`);
     } else ok(false, "agent did not render in the 390px frame");
     frame.remove();
+  };
+
+  // Learner: the printable certificate carries the brand, real names from the backend and a working verification QR code.
+  suites.certificate = async () => {
+    await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
+    navigate("/"); await settled("u-maya");
+    const mine = (await apiGet("/certificates")) || [];
+    const api = mine.find((c) => c.status === "VALID") || mine[0];
+    ok(!!api && !!api.recipientName && !!api.courseTitle && !!api.issuer, `certificates carry recipient, course and issuer from the backend (${api?.recipientName}, ${api?.courseTitle}, ${api?.issuer})`);
+    const pub = await fetch(`http://localhost:8080/api/certificates/verify/${encodeURIComponent(api.certificateNumber)}`).then((r) => r.json());
+    ok(pub.recipientName === api.recipientName && pub.courseTitle === api.courseTitle && !("email" in pub) && !JSON.stringify(pub).includes("@"), "public verification shows the names without any e-mail address");
+
+    navigate("/certificates");
+    await waitFor(() => [...document.querySelectorAll("#main button")].some((b) => /View/.test(b.textContent)), 8000, "certificate wallet");
+    const local = load("certificates").find((c) => c.id === api.certificateNumber);
+    ok(!!local && local.recipientName === api.recipientName, "the wallet keeps the backend names locally");
+    const { openCertificate } = await import("/src/pages/Certificates.js");
+    openCertificate(local);
+    const cert = await waitFor(() => q(`.modal [data-cert="${api.certificateNumber}"]`), 3000, "certificate modal");
+    ok(!!cert, "View opens the certificate");
+    const logo = cert.querySelector(".cert-logo");
+    ok(!!(await imgLoaded(logo)) && /workeasy360-logo\.png$/.test(logo.getAttribute("src")) && logo.naturalWidth === 742, "certificate shows the official WorkEasy360 logo");
+    ok(/Certificate/i.test(cert.querySelector(".cert-title")?.textContent) && /of Completion/i.test(cert.querySelector(".cert-subtitle")?.textContent), "titled Certificate of Completion");
+    ok(cert.querySelector("[data-cert-name]")?.textContent === api.recipientName && cert.querySelector("[data-cert-course]")?.textContent === api.courseTitle, "recipient and course match the backend record");
+    ok(cert.querySelector(".cert-signature")?.textContent === (api.instructorName || api.issuer), `signed by the course instructor (${api.instructorName})`);
+    ok(cert.querySelector(".cert-meta")?.textContent.includes(api.issuer), "the issuing organisation is named");
+    ok(cert.querySelector(".cert-id")?.textContent === api.certificateNumber, "certificate ID is printed");
+    ok(!!cert.querySelector(".cert-seal svg image") && /workeasy360-mark\.png$/.test(cert.querySelector(".cert-seal svg image").getAttribute("href")), "gold seal carries the W mark");
+    ok(getComputedStyle(cert.querySelector(".cert-name")).fontFamily.includes("Great Vibes") && getComputedStyle(cert.querySelector(".cert-title")).fontFamily.includes("Cinzel"), "certificate typefaces are applied");
+    // The QR code encodes exactly this certificate's public verification link
+    const { default: qrcode } = await import("/src/lib/vendor/qrcode.js");
+    const url = `${location.origin}${location.pathname}#/verify/${encodeURIComponent(api.certificateNumber)}`;
+    const qr = qrcode(0, "M"); qr.addData(url); qr.make();
+    let d = ""; for (let r = 0; r < qr.getModuleCount(); r++) for (let c = 0; c < qr.getModuleCount(); c++) if (qr.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
+    ok(cert.querySelector("[data-cert-qr] path")?.getAttribute("d") === d && cert.querySelector("[data-cert-qr]").getAttribute("href") === `#/verify/${encodeURIComponent(api.certificateNumber)}`, "QR code encodes the certificate's verification link");
+    const r = cert.getBoundingClientRect();
+    ok(Math.abs(r.width / r.height - 1.414) < 0.01 && r.width >= 620, `A4 landscape proportions (${Math.round(r.width)}×${Math.round(r.height)})`);
+    ok(!cert.querySelector("[data-cert-stamp]"), "a valid certificate has no stamp");
+    document.querySelector(".modal")?.closest(".scrim")?.remove();
+    // Revoked certificates are stamped (rendered from a copy, so no backend record changes)
+    const { CertificateView } = await import("/src/pages/Certificates.js");
+    const revoked = CertificateView({ ...local, revoked: true });
+    document.body.append(revoked);
+    ok(revoked.querySelector('[data-cert-stamp="revoked"]')?.textContent === "Revoked", "revoked certificates carry a Revoked stamp");
+    revoked.remove();
   };
 }

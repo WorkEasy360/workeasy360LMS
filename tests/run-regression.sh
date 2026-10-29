@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runs the in-browser regression suites one at a time in headless Chrome and writes a summary.
 #
-#   bash tests/run-regression.sh                          # the full regression (69 suites)
+#   bash tests/run-regression.sh                          # the full regression (70 suites)
 #   bash tests/run-regression.sh "instructor builder" "learner quiz"
 #
 # Requirements: frontend served by serve.ps1 (it provides the /__log endpoint the suites report to), backend running
@@ -43,7 +43,7 @@ ALL=(
   "learner coachPersist" "admin adminUsers" "instructor assignLearner" "instructor notificationsBackend"
   "instructor platformAdmin" "instructor searchScope" "learner responsive" "admin accountLogin"
   "learner signup" "learner freeCourseAccess" "learner paidCourseLock" "learner purchaseFlow" "learner purchaseFailures"
-  "learner agent" "admin brand"
+  "learner agent" "admin brand" "learner certificate"
 )
 [ $# -gt 0 ] && SUITES=("$@") || SUITES=("${ALL[@]}")
 

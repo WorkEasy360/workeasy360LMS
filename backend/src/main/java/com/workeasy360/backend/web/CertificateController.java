@@ -20,13 +20,13 @@ public class CertificateController {
     @GetMapping
     public List<CertificateDto> list(@AuthenticationPrincipal CurrentUser user, @RequestParam(defaultValue = "false") boolean all) {
         List<Certificate> certs = (all && perm.isAdmin(user)) ? service.all() : service.forUser(user.getId());
-        return certs.stream().map(c -> CertificateDto.of(c, service.status(c).name())).toList();
+        return service.views(certs);
     }
 
     @GetMapping("/verify/{number}")
     public CertificateDto verify(@PathVariable String number) {
         Certificate c = service.verify(number).orElseThrow(() -> ApiException.notFound("Certificate"));
-        return CertificateDto.of(c, service.status(c).name());
+        return service.view(c);
     }
 
     @PostMapping("/{id}/revoke")
@@ -37,7 +37,6 @@ public class CertificateController {
 
     @PostMapping("/{id}/renew")
     public CertificateDto renew(@AuthenticationPrincipal CurrentUser user, @PathVariable String id) {
-        Certificate c = service.renew(id);
-        return CertificateDto.of(c, service.status(c).name());
+        return service.view(service.renew(id));
     }
 }
