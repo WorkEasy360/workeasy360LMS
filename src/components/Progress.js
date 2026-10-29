@@ -14,7 +14,7 @@ export function ProgressRing(value, { size = 56, stroke = 6, color = "var(--c-pr
   const v = clamp(Math.round(value || 0));
   const r = (size - stroke) / 2, c = 2 * Math.PI * r;
   const wrap = h("div", { class: "ring", style: `width:${size}px;height:${size}px`, role: "img", "aria-label": `${v}% complete` });
-  wrap.innerHTML = `<svg width="${size}" height="${size}" aria-hidden="true"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#e8eaf3" stroke-width="${stroke}"/><circle class="ring-fg" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c}"/></svg>`;
+  wrap.innerHTML = `<svg width="${size}" height="${size}" aria-hidden="true"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#EEF3F2" stroke-width="${stroke}"/><circle class="ring-fg" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c}"/></svg>`;
   if (label) wrap.appendChild(h("span", { class: "ring-label", style: `font-size:${Math.max(11, size / 4.2)}px` }, `${v}%`));
   const fg = wrap.querySelector(".ring-fg");
   const set = (n) => (fg.style.strokeDashoffset = c * (1 - clamp(n) / 100));

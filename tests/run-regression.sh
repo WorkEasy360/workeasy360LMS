@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runs the in-browser regression suites one at a time in headless Chrome and writes a summary.
 #
-#   bash tests/run-regression.sh                          # the full regression (67 suites)
+#   bash tests/run-regression.sh                          # the full regression (69 suites)
 #   bash tests/run-regression.sh "instructor builder" "learner quiz"
 #
 # Requirements: frontend served by serve.ps1 (it provides the /__log endpoint the suites report to), backend running
@@ -43,14 +43,17 @@ ALL=(
   "learner coachPersist" "admin adminUsers" "instructor assignLearner" "instructor notificationsBackend"
   "instructor platformAdmin" "instructor searchScope" "learner responsive" "admin accountLogin"
   "learner signup" "learner freeCourseAccess" "learner paidCourseLock" "learner purchaseFlow" "learner purchaseFailures"
+  "learner agent" "admin brand"
 )
 [ $# -gt 0 ] && SUITES=("$@") || SUITES=("${ALL[@]}")
 
 # Stops every browser process started for one profile. A plain `kill` only stops the launcher on Windows, and a
-# surviving browser would keep acting as the demo user during the next suite.
+# surviving browser would keep acting as the demo user during the next suite. The launcher's pid is signalled only
+# while it is still a running job of this shell: on Windows (Git Bash) it is a real Windows PID, and once the
+# launcher has exited Windows can hand that PID to another program (a PostgreSQL backend was killed that way).
 stop_browser() {
   local pid=$1 tag=$2
-  kill "$pid" 2>/dev/null
+  jobs -pr | grep -qx "$pid" && kill "$pid" 2>/dev/null
   if command -v powershell > /dev/null 2>&1; then
     powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | Where-Object { \$_.CommandLine -like '*${tag}*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" > /dev/null 2>&1
   else

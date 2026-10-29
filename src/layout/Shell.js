@@ -5,11 +5,13 @@ import { navByRole, ROLE_LABEL, activeNavPath } from "./navConfig.js";
 import { Breadcrumb } from "../components/Tabs.js";
 import { Dropdown } from "../components/Menu.js";
 import { Button } from "../components/Button.js";
-import { Avatar, Badge } from "../components/Badge.js";
+import { Badge } from "../components/Badge.js";
 import { openDrawer, confirmDialog, toast } from "../components/Overlay.js";
 import { EmptyState } from "../components/States.js";
 import { getUser, login, logout, resetAll, DEMO_USER_BY_ROLE } from "../lib/store.js";
-import { unreadCount, notificationsFor, markRead } from "../services/people.js";
+import { unreadCount, notificationsFor, markRead, initials } from "../services/people.js";
+import { ProductLogo, ProductMark } from "../components/Brand.js";
+import { initAgent, updateAgent } from "../components/Agent.js";
 import { search } from "../services/search.js";
 import { navigate } from "../router.js";
 import { canCreateCourse } from "../services/permissions.js";
@@ -33,10 +35,13 @@ export function renderSidebar(path) {
     }),
   ]));
   mount($("sidebar"),
-    h("a", { class: "brand", href: "#/", "aria-label": "WorkEasy360 home" }, [h("span", { class: "brand-mark" }, ico("zap", 18)), h("span", { class: "brand-name" }, ["WorkEasy", h("b", {}, "360")])]),
+    h("a", { class: "brand", href: "#/", "aria-label": "WorkEasy360 LMS home" }, [ProductLogo({ tone: "dark", layout: "stacked", size: "md", decorative: true }), ProductMark(32, "", "brand-compact")]),
     canCreateCourse(user) ? h("div", { class: "nav-cta" }, h("a", { class: "btn btn-primary", href: "#/builder/new", title: "Create Course", "data-guide-target": "nav.create-course" }, [ico("plus", 18), h("span", { class: "cta-label" }, "Create Course")])) : null,
     nav,
-    h("div", { class: "sidebar-foot" }, h("div", { class: "row-sm small muted" }, [ico("shield", 16), `${ROLE_LABEL[user.role]} workspace`]))
+    h("div", { class: "sidebar-foot" }, h("div", { class: "sidebar-user" }, [
+      h("span", { class: "brand-avatar", "aria-hidden": "true" }, initials(user.name)),
+      h("div", { class: "grow" }, [h("div", { class: "sidebar-user-name truncate" }, user.name), h("div", { class: "sidebar-user-role" }, ROLE_LABEL[user.role])]),
+    ]))
   );
 }
 
@@ -67,7 +72,11 @@ export function renderTopbar(pageMeta = {}, path = "/") {
       { label: "Reset demo data", icon: "refresh", onClick: async () => { if (await confirmDialog({ title: "Reset demo data?", message: "This restores all courses, progress, posts and guides to their original state.", confirmLabel: "Reset", danger: true })) { resetAll(); logout(); location.hash = "#/login"; location.reload(); } } },
       { label: "Sign out", icon: "logout", onClick: () => { guideEngine.close(); logout(); navigate("/login"); } },
     ],
-    renderTrigger: ({ onClick }) => h("button", { class: "user-btn", type: "button", onclick: onClick, "aria-label": `Account menu for ${user.name}` }, [Avatar(user, "sm"), h("span", { class: "user-name small strong" }, user.name.split(" ")[0]), ico("chevron-down", 14)]),
+    renderTrigger: ({ onClick }) => h("button", { class: "user-btn", type: "button", onclick: onClick, "aria-label": `Account menu for ${user.name}` }, [
+      h("span", { class: "brand-avatar", "aria-hidden": "true" }, initials(user.name)),
+      h("span", { class: "user-name" }, [h("span", { class: "small strong" }, user.name.split(" ")[0]), h("span", { class: "user-role" }, ROLE_LABEL[user.role])]),
+      ico("chevron-down", 14),
+    ]),
   });
 
   mount($("topbar"),
@@ -143,6 +152,7 @@ export function setPage(page, path) {
   mount(main, h("div", { class: "page-inner" }, page.el));
   main.scrollTop = 0;
   document.body.classList.remove("nav-open");
+  updateAgent(path);
   const target = main.querySelector("#page-title, h1") || main;
   target.setAttribute("tabindex", "-1");
   target.focus({ preventScroll: true });
@@ -152,4 +162,5 @@ export function initShell() {
   $("sidebar-scrim").addEventListener("click", () => document.body.classList.remove("nav-open"));
   document.addEventListener("keydown", (e) => e.key === "Escape" && document.body.classList.remove("nav-open"));
   bus.on("data:notifications", () => getUser() && refreshChrome());
+  initAgent($("app"));
 }

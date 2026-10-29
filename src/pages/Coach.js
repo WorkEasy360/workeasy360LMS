@@ -13,6 +13,7 @@ import { toast } from "../components/Overlay.js";
 import { NextStep, RecommendationList, PlanCard } from "../components/Recommendations.js";
 import { loadCoachContext, sendCoachMessage, loadConversation, loadConversations, loadPlans, createPlan, SUGGESTED_PROMPTS, LESSON_PROMPTS } from "../services/coach.js";
 import { navigate } from "../router.js";
+import { AgentAvatar } from "../components/Brand.js";
 
 export function CoachPage(ctx) {
   const user = ctx.user;
@@ -48,7 +49,7 @@ export function CoachPage(ctx) {
   function bubble(m) {
     const actions = (m.actions || []).map((a) => Button({ label: a.label, icon: a.type === "CONTINUE_LESSON" ? "play" : a.type === "START_PLAN" ? "clock" : "arrow-right", size: "sm", variant: a.type === "CONTINUE_LESSON" || a.type === "START_PLAN" ? "primary" : "secondary", attrs: { "data-coach-action": a.type }, onClick: () => a.type === "START_PLAN" ? startPlan(a.planId) : navigate(a.href) }));
     return h("div", { class: ["coach-msg", m.role === "USER" ? "is-user" : "is-coach"], "data-coach-msg": m.role }, [
-      m.role === "COACH" && h("span", { class: "coach-avatar" }, ico("sparkles", 14)),
+      m.role === "COACH" && AgentAvatar(28, "coach-avatar"),
       h("div", { class: "coach-bubble" }, [h("div", { class: "coach-text" }, m.content.split("\n").map((line) => h("div", {}, line))), actions.length > 0 && h("div", { class: "row wrap", style: "margin-top:8px" }, actions), h("div", { class: "xs muted", style: "margin-top:4px" }, [m.role === "COACH" ? "Grounded in your learning record · " : "", timeAgo(new Date(m.at).getTime())])]),
     ]);
   }
@@ -63,7 +64,7 @@ export function CoachPage(ctx) {
     const text = input.value.trim();
     if (!text || sending) return;
     sending = true; sendBtn.disabled = true; root.dataset.coachState = "sending";
-    const pending = h("div", { class: "coach-msg is-coach is-pending", "aria-busy": "true" }, [h("span", { class: "coach-avatar" }, ico("sparkles", 14)), h("div", { class: "coach-bubble" }, h("span", { class: "coach-typing" }, [h("i"), h("i"), h("i")]))]);
+    const pending = h("div", { class: "coach-msg is-coach is-pending", "aria-busy": "true" }, [AgentAvatar(28, "coach-avatar"), h("div", { class: "coach-bubble" }, h("span", { class: "coach-typing" }, [h("i"), h("i"), h("i")]))]);
     messages.push({ role: "USER", content: text, at: new Date().toISOString() }); drawThread(); thread.append(pending); thread.scrollTop = thread.scrollHeight; input.value = "";
     try {
       const r = await sendCoachMessage({ conversationId, text, lessonId });
@@ -95,7 +96,7 @@ export function CoachPage(ctx) {
 
   right.append(
     h("div", { class: "card coach-chat", "data-guide-target": "coach.chat" }, [
-      h("div", { class: "coach-chat-head" }, [h("span", { class: "coach-avatar" }, ico("sparkles", 16)), h("div", {}, [h("div", { class: "strong small" }, "Learning Coach"), h("div", { class: "xs muted" }, lessonId ? "Talking about your current lesson" : "Uses only your own learning record")]), h("span", { class: "grow" }), Button({ label: "New chat", size: "sm", variant: "ghost", onClick: () => { conversationId = null; messages = []; drawThread(); input.focus(); } })]),
+      h("div", { class: "coach-chat-head" }, [AgentAvatar(28, "coach-avatar"), h("div", {}, [h("div", { class: "strong small" }, "Learning Coach"), h("div", { class: "xs muted" }, lessonId ? "Talking about your current lesson" : "Uses only your own learning record")]), h("span", { class: "grow" }), Button({ label: "New chat", size: "sm", variant: "ghost", onClick: () => { conversationId = null; messages = []; drawThread(); input.focus(); } })]),
       thread,
       h("div", { class: "coach-compose" }, [input, sendBtn]),
     ]),

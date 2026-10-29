@@ -16,11 +16,11 @@ export function BarChart(data, { height = 160, color = "var(--c-primary)", forma
   const max = Math.max(1, ...data.map((d) => d.value));
   const bw = (W - pad.l - pad.r) / data.length;
   const root = svg("svg", { viewBox: `0 0 ${W} ${height}`, width: "100%", role: "img", "aria-label": ariaLabel, style: "display:block;height:auto" });
-  [0.5, 1].forEach((f) => root.appendChild(svg("line", { x1: 0, x2: W, y1: pad.t + (height - pad.t - pad.b) * (1 - f), y2: pad.t + (height - pad.t - pad.b) * (1 - f), stroke: "#e4e7f0", "stroke-dasharray": "3 4" })));
+  [0.5, 1].forEach((f) => root.appendChild(svg("line", { x1: 0, x2: W, y1: pad.t + (height - pad.t - pad.b) * (1 - f), y2: pad.t + (height - pad.t - pad.b) * (1 - f), stroke: "#E1E7EB", "stroke-dasharray": "3 4" })));
   data.forEach((d, i) => {
     const bh = ((height - pad.t - pad.b) * d.value) / max;
     root.appendChild(svg("rect", { x: pad.l + i * bw + bw * 0.18, y: height - pad.b - bh, width: bw * 0.64, height: Math.max(1, bh), rx: 3, fill: color, opacity: 0.9 }, [title(`${d.label}: ${format(d.value)}`)]));
-    if (i % showEvery === 0) { const t = svg("text", { x: i === 0 ? pad.l : pad.l + i * bw + bw / 2, y: height - 6, "text-anchor": i === 0 ? "start" : "middle", "font-size": 11, fill: "#5d6479" }); t.textContent = d.label; root.appendChild(t); }
+    if (i % showEvery === 0) { const t = svg("text", { x: i === 0 ? pad.l : pad.l + i * bw + bw / 2, y: height - 6, "text-anchor": i === 0 ? "start" : "middle", "font-size": 11, fill: "#667581" }); t.textContent = d.label; root.appendChild(t); }
   });
   return h("div", { class: "chart" }, root);
 }
@@ -38,7 +38,7 @@ export function Sparkline(values, { width = 120, height = 36, color = "var(--c-p
 export function StackedBar(parts, { height = 12 } = {}) {
   const total = parts.reduce((n, p) => n + p.value, 0) || 1;
   return h("div", { class: "stack-sm" }, [
-    h("div", { style: `display:flex;height:${height}px;border-radius:99px;overflow:hidden;background:#e8eaf3`, role: "img", "aria-label": parts.map((p) => `${p.label} ${p.value}`).join(", ") },
+    h("div", { style: `display:flex;height:${height}px;border-radius:99px;overflow:hidden;background:#EEF3F2`, role: "img", "aria-label": parts.map((p) => `${p.label} ${p.value}`).join(", ") },
       parts.filter((p) => p.value).map((p) => h("span", { style: `width:${(p.value / total) * 100}%;background:${p.color};transition:width var(--t-moment) var(--ease-out)`, title: `${p.label}: ${p.value}` }))),
     h("div", { class: "row wrap xs" }, parts.map((p) => h("span", { class: "row-sm" }, [h("span", { class: "dot", style: `color:${p.color}` }), `${p.label} `, h("strong", {}, String(p.value))]))),
   ]);
@@ -71,13 +71,13 @@ export function LineChart(data, series, { height = 180, ariaLabel = "Trend", sho
   const y = (v) => pad.t + (height - pad.t - pad.b) * (1 - v / max);
   const totals = series.map((s) => s.label + " total " + data.reduce((n, d) => n + (d[s.key] || 0), 0)).join(", ");
   const root = svg("svg", { viewBox: "0 0 " + W + " " + height, width: "100%", role: "img", "aria-label": ariaLabel + ": " + totals, style: "display:block;height:auto" });
-  [0.5, 1].forEach((f) => root.appendChild(svg("line", { x1: 0, x2: W, y1: y(max * f), y2: y(max * f), stroke: "#e4e7f0", "stroke-dasharray": "3 4" })));
+  [0.5, 1].forEach((f) => root.appendChild(svg("line", { x1: 0, x2: W, y1: y(max * f), y2: y(max * f), stroke: "#E1E7EB", "stroke-dasharray": "3 4" })));
   series.forEach((s) => {
     const d = data.map((p, i) => (i ? "L" : "M") + x(i).toFixed(1) + "," + y(p[s.key] || 0).toFixed(1)).join(" ");
     root.appendChild(svg("path", { d, fill: "none", stroke: s.color, "stroke-width": 2.5, "stroke-linecap": "round", "stroke-linejoin": "round", class: "chart-line" }));
     data.forEach((p, i) => { if (p[s.key]) root.appendChild(svg("circle", { cx: x(i), cy: y(p[s.key]), r: 3.5, fill: s.color, class: "chart-dot" }, [title((p.label || p.date) + ": " + s.label + " " + format(p[s.key]))])); });
   });
-  data.forEach((p, i) => { if (i % showEvery === 0 || i === data.length - 1) { const t = svg("text", { x: x(i), y: height - 6, "text-anchor": i === 0 ? "start" : i === data.length - 1 ? "end" : "middle", "font-size": 11, fill: "#5d6479" }); t.textContent = p.label || p.date; root.appendChild(t); } });
+  data.forEach((p, i) => { if (i % showEvery === 0 || i === data.length - 1) { const t = svg("text", { x: x(i), y: height - 6, "text-anchor": i === 0 ? "start" : i === data.length - 1 ? "end" : "middle", "font-size": 11, fill: "#667581" }); t.textContent = p.label || p.date; root.appendChild(t); } });
   const legend = h("div", { class: "row wrap xs", style: "gap:14px" }, series.map((s) => h("span", { class: "row-sm" }, [h("span", { class: "dot", style: "color:" + s.color }), s.label])));
   return h("div", { class: "chart chart-draw stack-sm" }, [data.length ? root : h("p", { class: "small muted" }, "No activity in this period."), legend]);
 }

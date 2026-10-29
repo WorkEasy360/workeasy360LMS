@@ -88,6 +88,7 @@ const ready = Promise.all([
   import("./suites_ai.js").then((m) => m.registerAi({ suites, log, ok, sleep, q, click, type, waitFor, navigate })),
   import("./suites_coach.js").then((m) => m.registerCoach({ suites, log, ok, sleep, q, click, type, waitFor, navigate })),
   import("./suites_commerce.js").then((m) => m.registerCommerce({ suites, log, ok, sleep, q, click, type, waitFor, navigate })),
+  import("./suites_agent.js").then((m) => m.registerAgent({ suites, log, ok, sleep, q, click, type, waitFor, navigate })),
   import("./suites_platform.js").then((m) => { m.registerPlatform({ suites, log, ok, sleep, q, click, type, waitFor, navigate }); m.registerResponsive({ suites, log, ok, sleep, waitFor }); m.registerAccountLogin({ suites, ok, sleep, q, click, type, waitFor }); }),
 ]).catch((e) => log("ERROR loading suite modules:", e.message));
 (async () => {

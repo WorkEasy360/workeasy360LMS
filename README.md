@@ -41,7 +41,9 @@ index.html ─ src/app.js (routes, session, hydration)          backend/ (Spring
                   seed data for the offline demo                  service/    business rules, permissions, notifications
    src/services   API client + domain services (local cache       ai/         provider abstraction, mock, OpenAI/Anthropic
                   first, background sync to the backend)          domain/     JPA entities   repo/ Spring Data repositories
-   src/pages      screens      src/components  design system      security/   JWT filter + service, CurrentUser
+   src/pages      screens      src/components  design system,     security/   JWT filter + service, CurrentUser
+                  brand, floating AI agent (Agent.js)
+   src/assets     brand artwork (logo, mark, agent)
    src/builder    content blocks, AI quiz panel                   resources/db/migration  Flyway V1…V7
    src/guide      in-product guide engine and guide definitions   storage/    uploaded videos (FILE_STORAGE_PATH)
    tests/         in-browser regression suites
@@ -130,6 +132,12 @@ automatically: the **AI Course Builder** and **AI Quiz Generator** produce draft
 recommendations) and never receives passwords, tokens, keys or other users' data. Recommendations, next steps and
 learning plans are deterministic and work with `AI_ENABLED=false`; the coach chat degrades to the mock provider.
 
+The **WorkEasy360 Assistant** (`src/components/Agent.js`) is the floating agent on every signed-in page: the robot
+launcher bottom-right opens a side panel with suggested questions, conversation history and guided tours for the
+user's role. It uses the same coach endpoints (`/api/coach/message`, `/api/coach/conversations`), so answers stay
+grounded in the user's own record; in the lesson player it also sends the current lesson. It is hidden on `/coach`,
+the full-page version of the same conversation.
+
 ## 6a. Sign-up, free and paid courses, purchases
 
 - **Public sign-up** (`POST /api/auth/register`, page `#/signup`): name, e-mail, password (8+ characters with a letter and
@@ -150,6 +158,13 @@ learning plans are deterministic and work with `AI_ENABLED=false`; the coach cha
   exists only when `PAYMENTS_PROVIDER=mock` **and** `PAYMENTS_MOCK_ALLOWED=true`). A real provider implements the
   interface (checkout session + a signed callback that calls `confirm`); its key and webhook secret come from
   `PAYMENTS_API_KEY` / `PAYMENTS_WEBHOOK_SECRET`. Without a real provider, production can sell nothing — by design.
+
+## 6b. Brand
+
+The UI uses the WorkEasy360 palette shared with WorkEasy360 Booking, defined once in `src/styles/tokens.css`: navy
+`#13222E` (sidebar, sign-in), green `#00BF62` (primary actions; `#008F49` for green text), background `#F6F8F9`,
+borders `#E1E7EB`, text `#17232D` / `#667581`. The official logo, the "W" mark (also the favicon) and the agent artwork
+are in `src/assets/brand/` (right-sized copies of the company artwork) and are rendered by `src/components/Brand.js`.
 
 ## 7. Notifications and automation
 
@@ -199,16 +214,17 @@ provider and CORS without secrets.
 | --- | --- |
 | Backend compile | `cd backend && mvn -q -DskipTests compile` |
 | API smoke / security | curl against `/api/...` (401 without token, 403 for wrong role, 404/409 guards) |
-| Browser regression (67 suites) | `index.html?as=<role>&selftest=<suite>` — see below |
+| Browser regression (69 suites) | `index.html?as=<role>&selftest=<suite>` — see below |
 
 Browser suites live in `tests/` (`selftest.js` registers `suites_video.js`, `suites_skills.js`,
-`suites_analytics.js`, `suites_ai.js`, `suites_coach.js`, `suites_platform.js`). They drive the real UI against the
+`suites_analytics.js`, `suites_ai.js`, `suites_coach.js`, `suites_commerce.js`, `suites_agent.js`,
+`suites_platform.js`). They drive the real UI against the
 running backend, log to `tests/last-run.log` through the dev server's `/__log` endpoint and finish with
 `RESULT: ALL PASSED` or `RESULT: n FAILED`. They need the frontend served by `serve.ps1`, the backend running with
 the demo data seeded, and Chrome. Run them **one at a time** (they share the log and the demo accounts):
 
 ```
-bash tests/run-regression.sh                        # all 67 suites, sequential; summary in tests/regression-result.txt
+bash tests/run-regression.sh                        # all 69 suites, sequential; summary in tests/regression-result.txt
 bash tests/run-regression.sh "instructor builder"   # selected suites
 CHROME="/path/to/chrome" BASE_URL=http://localhost:5173 bash tests/run-regression.sh
 ```
@@ -219,11 +235,13 @@ development database, never production.
 Suite → launch role: instructor — guide, builder, perms, review, video, addvideo, backendE2E, guideBackend, smoke,
 skillMapping, analyticsInstructor, guideAnalyticsBackend, aiCourseInstructor, aiQuiz, aiValidation, aiProvider,
 aiPersist, assignLearner, notificationsBackend, platformAdmin, searchScope; admin — video, smoke, skillsAdmin,
-analyticsAdmin, analyticsFilters, seedConsistency, guideAnalyticsPersist, aiCourseAdmin, adminUsers, accountLogin; learner —
+analyticsAdmin, analyticsFilters, seedConsistency, guideAnalyticsPersist, aiCourseAdmin, adminUsers, accountLogin,
+brand (palette, logo, agent for admins, phone width); learner —
 learnerguide, player, quiz, community, smoke, quizBackend, assignmentBackend, communityBackend, videoResume,
 certVerify, quizFresh, skillProgress, skillQuizEvidence, journey, skillsPersist, analyticsLearner, analyticsFunnel,
 analyticsAssessments, analyticsPersist, aiRbac, responsive (phone-width overflow check), signup, freeCourseAccess, paidCourseLock, purchaseFlow, purchaseFailures, coachContext, recommendations, recommendationFeedback,
-coachConversation, coachLessonContext, coachGrounding, coachRbac, coachValidation, learningPlan, coachPersist.
+coachConversation, coachLessonContext, coachGrounding, coachRbac, coachValidation, learningPlan, coachPersist, agent
+(WorkEasy360 Assistant).
 Suites always run with `AI_ENABLED=false` (mock provider) — no external AI calls.
 
 ## 11. Guides

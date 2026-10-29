@@ -197,7 +197,7 @@ function AdminDashboard(user) {
       h("div", { class: "stack-lg" }, [
         h("section", {}, [SectionTitle("Manager insights"), Card(h("div", { class: "stack" }, [MeterRow("Completion", s.completionRate, { tone: "" }), MeterRow("Assessment score", s.avgScore, { tone: "" }), MeterRow("Skill readiness", s.skillReadiness, { tone: "teal" }), h("p", { class: "xs muted" }, "Skill readiness = current skill level vs. each person's target.")]))]),
         h("section", {}, [SectionTitle("Progress by team"), Card(h("div", { class: "stack" }, dept.map((d) => MeterRow(d.dept, d.pct, { tone: "" }))))]),
-        h("section", {}, [SectionTitle("Certificate health"), Card(StackedBar([{ label: "Valid", value: c.valid, color: "var(--c-success)" }, { label: "Expiring", value: c.expiring, color: "#d98a1b" }, { label: "Expired", value: c.expired, color: "var(--c-danger)" }]))]),
+        h("section", {}, [SectionTitle("Certificate health"), Card(StackedBar([{ label: "Valid", value: c.valid, color: "var(--c-success)" }, { label: "Expiring", value: c.expiring, color: "#F59E0B" }, { label: "Expired", value: c.expired, color: "var(--c-danger)" }]))]),
       ]),
     ]),
   ]);

@@ -51,7 +51,7 @@ export function PostCard({ post, user, open = false, onChange, canPin = false })
           h("div", { class: "small", style: "white-space:pre-wrap;margin-top:2px" }, c.body),
         ]),
         h("div", { class: "row-sm xs", style: "margin:4px 0 0 8px" }, [
-          h("button", { class: "btn btn-ghost btn-sm", type: "button", "aria-pressed": String(liked), style: liked ? "color:var(--c-primary)" : "", onclick: () => { toggleCommentLike(post.id, c.id, user.id); bump(); } }, [ico("thumbs", 14), c.likes.length || "Like"]),
+          h("button", { class: "btn btn-ghost btn-sm", type: "button", "aria-pressed": String(liked), style: liked ? "color:var(--c-primary-ink)" : "", onclick: () => { toggleCommentLike(post.id, c.id, user.id); bump(); } }, [ico("thumbs", 14), c.likes.length || "Like"]),
           !isReply && h("button", { class: "btn btn-ghost btn-sm", type: "button", onclick: () => { replyTo = replyTo === c.id ? null : c.id; draw(); card.querySelector(`[data-reply="${c.id}"] input`)?.focus(); } }, [ico("message", 14), "Reply"]),
         ]),
         replyTo === c.id && composerRow("Write a reply…", c.id),

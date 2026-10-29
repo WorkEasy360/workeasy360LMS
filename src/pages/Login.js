@@ -1,6 +1,7 @@
 // Sign-in: e-mail + password against the backend, plus one-click demo workspaces (seeded demo accounts).
 import { h, mount } from "../lib/dom.js";
 import { icon as ico } from "../lib/icons.js";
+import { ProductLogo } from "../components/Brand.js";
 import { Avatar } from "../components/Badge.js";
 import { Button } from "../components/Button.js";
 import { Field, Input } from "../components/Form.js";
@@ -28,7 +29,7 @@ export function LoginPage(root) {
       h("div", { class: "row" }, [h("span", { class: "icon-tile" }, ico(r.icon, 22)), h("div", { style: "text-align:left" }, [h("h3", {}, r.title), h("div", { class: "xs muted" }, `Sign in as ${user.name}`)]), h("span", { class: "grow" }), Avatar(user)]),
       h("p", { class: "muted small", style: "text-align:left;margin:12px 0" }, r.desc),
       h("ul", { class: "stack-sm small", style: "text-align:left" }, r.perks.map((p) => h("li", { class: "row-sm" }, [ico("check", 16), p]))),
-      h("div", { class: "row-sm strong small", style: "margin-top:16px;color:var(--c-primary)" }, ["Continue", ico("arrow-right", 16)]),
+      h("div", { class: "row-sm strong small", style: "margin-top:16px;color:var(--c-primary-ink)" }, ["Continue", ico("arrow-right", 16)]),
     ]);
   });
 
@@ -51,9 +52,9 @@ export function LoginPage(root) {
     h("p", { class: "small muted center", style: "margin:4px 0 0" }, ["Don't have an account? ", h("a", { href: "#/signup", "data-login-signup": "" }, "Create Account")]),
   ]);
 
-  mount(root, h("div", { class: "login" }, [
+  mount(root, h("div", { class: "login login-auth" }, [
     h("div", { class: "login-inner" }, [
-      h("div", { class: "row", style: "justify-content:center;margin-bottom:24px" }, [h("span", { class: "brand-mark", style: "width:44px;height:44px;border-radius:13px" }, ico("zap", 24)), h("span", { class: "brand-name", style: "font-size:26px;font-weight:800;letter-spacing:-0.02em" }, ["WorkEasy", h("b", { style: "color:var(--c-primary)" }, "360")])]),
+      h("div", { class: "login-brand" }, ProductLogo({ tone: "dark", size: "lg" })),
       h("h1", { class: "center", id: "page-title", tabindex: "-1" }, "What should you do next?"),
       h("p", { class: "muted center", style: "margin:10px auto 24px;max-width:520px" }, DEMO_ENABLED ? "A learning platform that guides you. Sign in with your account, or explore a demo workspace." : "A learning platform that guides you. Sign in with your account."),
       form,

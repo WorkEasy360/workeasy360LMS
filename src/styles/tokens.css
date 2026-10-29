@@ -1,33 +1,42 @@
-/* WorkEasy360 design tokens */
+/* WorkEasy360 design tokens: the WorkEasy360 brand palette shared with WorkEasy360 Booking */
 :root {
-  --c-bg: #f5f6fb;
-  --c-surface: #ffffff;
-  --c-surface-2: #f9fafd;
-  --c-border: #e4e7f0;
-  --c-border-strong: #cdd2e0;
-  --c-text: #12141c;
-  --c-text-2: #454b5e;
-  --c-muted: #5d6479;
+  --c-navy: #13222E;
+  --c-navy-light: #1E3344;
+  --c-accent: #FFC940;
 
-  --c-primary: #4f46e5;
-  --c-primary-hover: #4338ca;
-  --c-primary-press: #3730a3;
-  --c-primary-soft: #eef0ff;
-  --c-primary-ink: #3730a3;
+  --c-bg: #F6F8F9;
+  --c-surface: #FFFFFF;
+  --c-surface-2: #F9FAFB;
+  --c-subtle: #EEF3F2;
+  --c-hover: #F3F4F6;
+  --c-border: #E1E7EB;
+  --c-border-strong: #D1D9E0;
+  --c-text: #17232D;
+  --c-text-2: #374151;
+  --c-muted: #667581;
+  --c-placeholder: #94A3B0;
 
-  --c-teal: #0d8f8b;
-  --c-teal-soft: #e1f6f5;
-  --c-success: #0f7a55;
-  --c-success-soft: #e0f5ec;
-  --c-warning: #a8560a;
-  --c-warning-soft: #fff1dc;
-  --c-danger: #c2262e;
-  --c-danger-soft: #fdecec;
-  --c-info: #1d6fd1;
-  --c-info-soft: #e5f0fd;
+  --c-primary: #00BF62;
+  --c-primary-rgb: 0, 191, 98;
+  --c-primary-hover: #008F49;
+  --c-primary-press: #008F49;
+  --c-primary-soft: #E6F9F0;
+  --c-primary-ink: #008F49; /* brand green for text: #00BF62 is too light for small text on white */
 
-  --c-focus: #4f46e5;
-  --c-scrim: rgba(12, 14, 30, 0.46);
+  --c-teal: #0F766E;
+  --c-teal-soft: #F0FDFA;
+  --c-success: #047857;
+  --c-success-soft: #ECFDF5;
+  --c-warning: #B45309;
+  --c-warning-soft: #FFFBEB;
+  --c-danger: #DC2626;
+  --c-danger-ink: #B91C1C;
+  --c-danger-soft: #FEF2F2;
+  --c-info: #1D4ED8;
+  --c-info-soft: #EFF6FF;
+
+  --c-focus: #008F49;
+  --c-scrim: rgba(19, 34, 46, 0.5);
 
   --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
@@ -55,9 +64,9 @@
   --r-xl: 24px;
   --r-full: 999px;
 
-  --sh-1: 0 1px 2px rgba(18, 20, 40, 0.06);
-  --sh-2: 0 4px 14px rgba(18, 20, 40, 0.08);
-  --sh-3: 0 16px 40px rgba(18, 20, 40, 0.16);
+  --sh-1: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --sh-2: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --sh-3: 0 8px 32px rgba(0, 0, 0, 0.16);
 
   --t-micro: 180ms;
   --t-panel: 380ms;

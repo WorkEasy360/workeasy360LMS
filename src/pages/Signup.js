@@ -1,6 +1,6 @@
 // Public self-registration: always a LEARNER account (the server ignores any role a client might send).
 import { h, mount } from "../lib/dom.js";
-import { icon as ico } from "../lib/icons.js";
+import { ProductLogo } from "../components/Brand.js";
 import { Button } from "../components/Button.js";
 import { Field, Input } from "../components/Form.js";
 import { api } from "../services/api.js";
@@ -42,9 +42,9 @@ export function SignupPage(root) {
     error, submit,
     h("p", { class: "small muted center", style: "margin:4px 0 0" }, ["Already have an account? ", h("a", { href: "#/login", "data-signup-signin": "" }, "Sign In")]),
   ]);
-  mount(root, h("div", { class: "login" }, [
+  mount(root, h("div", { class: "login login-auth" }, [
     h("div", { class: "login-inner" }, [
-      h("div", { class: "row", style: "justify-content:center;margin-bottom:24px" }, [h("span", { class: "brand-mark", style: "width:44px;height:44px;border-radius:13px" }, ico("zap", 24)), h("span", { class: "brand-name", style: "font-size:26px;font-weight:800;letter-spacing:-0.02em" }, ["WorkEasy", h("b", { style: "color:var(--c-primary)" }, "360")])]),
+      h("div", { class: "login-brand" }, ProductLogo({ tone: "dark", size: "lg" })),
       h("h1", { class: "center", id: "page-title", tabindex: "-1" }, "Start learning today"),
       h("p", { class: "muted center", style: "margin:10px auto 24px;max-width:520px" }, "Create a free learner account to explore the catalogue."),
       form,
