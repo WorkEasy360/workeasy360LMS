@@ -8,7 +8,7 @@ import { Button } from "../components/Button.js";
 import { Badge } from "../components/Badge.js";
 import { openDrawer, confirmDialog, toast } from "../components/Overlay.js";
 import { EmptyState } from "../components/States.js";
-import { getUser, login, logout, resetAll, DEMO_USER_BY_ROLE } from "../lib/store.js";
+import { getUser, login, logout, resetAll, DEMO_USER_BY_ROLE, DEMO_ENABLED } from "../lib/store.js";
 import { unreadCount, notificationsFor, markRead, initials } from "../services/people.js";
 import { ProductLogo, ProductMark } from "../components/Brand.js";
 import { initAgent, updateAgent } from "../components/Agent.js";
@@ -76,12 +76,19 @@ export function renderTopbar(pageMeta = {}, path = "/") {
 
   const bell = h("button", { class: "btn btn-ghost btn-icon", type: "button", "aria-label": `Notifications${unreadCount(user.id) ? `, ${unreadCount(user.id)} unread` : ""}`, style: "position:relative", onclick: () => openNotifications() }, [ico("bell", 20), unreadCount(user.id) ? h("span", { class: "notif-dot" }) : null]);
 
+  // "View as" and "Reset demo data" are DEMO tooling: they switch the local demo session between the seeded demo
+  // people. They exist only in demo mode AND only for the demo accounts themselves — a real account (self-registered
+  // or admin-created) must never be offered another role's workspace, even though the backend refuses every
+  // privileged call anyway (the role lives in the signed JWT, not in this menu).
+  const isDemoUser = DEMO_ENABLED && Object.values(DEMO_USER_BY_ROLE).includes(user.id);
   const userMenu = Dropdown({
     align: "right", items: () => [
-      { group: "View as" },
-      ...Object.keys(ROLE_LABEL).map((r) => ({ label: ROLE_LABEL[r], icon: r === user.role ? "check" : "user", onClick: () => { if (r !== user.role) { login(DEMO_USER_BY_ROLE[r]); navigate("/", { replace: true }); } } })),
-      "sep",
-      { label: "Reset demo data", icon: "refresh", onClick: async () => { if (await confirmDialog({ title: "Reset demo data?", message: "This restores all courses, progress, posts and guides to their original state.", confirmLabel: "Reset", danger: true })) { resetAll(); logout(); location.hash = "#/login"; location.reload(); } } },
+      ...(isDemoUser ? [
+        { group: "View as" },
+        ...Object.keys(ROLE_LABEL).map((r) => ({ label: ROLE_LABEL[r], icon: r === user.role ? "check" : "user", onClick: () => { if (r !== user.role) { login(DEMO_USER_BY_ROLE[r]); navigate("/", { replace: true }); } } })),
+        "sep",
+        { label: "Reset demo data", icon: "refresh", onClick: async () => { if (await confirmDialog({ title: "Reset demo data?", message: "This restores all courses, progress, posts and guides to their original state.", confirmLabel: "Reset", danger: true })) { resetAll(); logout(); location.hash = "#/login"; location.reload(); } } },
+      ] : []),
       { label: "Sign out", icon: "logout", onClick: () => { guideEngine.close(); logout(); navigate("/login"); } },
     ],
     renderTrigger: ({ onClick }) => h("button", { class: "user-btn", type: "button", onclick: onClick, "aria-label": `Account menu for ${user.name}` }, [

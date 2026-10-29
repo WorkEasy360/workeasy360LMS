@@ -63,6 +63,12 @@ export function registerCommerce({ suites, log, ok, sleep, q, click, type, waitF
     ok(getUser()?.email === email && getUser()?.role === "learner" && !!token(), "successful sign-up signs the new learner in");
     await waitFor(() => q("#main") && q("#main").textContent.trim().length > 40, 8000, "home");
     ok(!!q("#main") && !!q(".sidebar") && /My Learning/.test(q(".sidebar").textContent), "learner Home renders with the learner navigation");
+    // Demo tooling must not exist for a real account: no "View as" role switcher, no demo reset — only Sign out.
+    q(".user-btn").click(); await sleep(200);
+    const menuText = q(".menu")?.textContent || "";
+    ok(!/View as/.test(menuText) && !/Reset demo data/.test(menuText) && /Sign out/.test(menuText), "a real account's menu offers Sign out only — no demo role switcher");
+    document.body.click(); await sleep(100);
+    ok(!q(".sidebar .nav-cta"), "a learner gets no Create Course button");
     const dup = await json(await post("/auth/register", { name: "Sam Again", email, password: "Learn1234" }, null));
     ok(dup.status === 409 && /already exists/i.test(dup.body?.message || ""), "duplicate e-mail is refused with 409 and a clear message");
     const evil = await json(await post("/auth/register", { name: "Evil", email: "evil." + Date.now().toString(36) + "@example.com", password: "Learn1234", role: "ADMIN" }, null));
