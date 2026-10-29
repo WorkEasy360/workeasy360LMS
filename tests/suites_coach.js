@@ -22,16 +22,42 @@ export function registerCoach({ suites, log, ok, sleep, q, click, type, waitFor,
   /** Waits until the page's main content element has not been replaced for `quietMs` (i.e. no re-mount is pending). */
   const stable = async (quietMs = 1500) => { let el = q("#main")?.firstElementChild, since = Date.now(); await waitFor(() => { const cur = q("#main")?.firstElementChild; if (cur !== el) { el = cur; since = Date.now(); } return Date.now() - since > quietMs; }, 12000, "stable page"); };
 
+  /** A published 2-lesson course of which the learner has completed exactly lesson 1 — a genuinely in-progress
+   *  course, created fresh so the suite never depends on what earlier runs left in the database. */
+  suites.__inProgressCourse = async () => {
+    await loginReal(DEMO_EMAIL_BY_ROLE.instructor, DEMO_PASSWORD);
+    navigate("/builder/new"); await waitFor(() => location.hash.startsWith("#/builder/c-") && T("course.name"), 6000, "builder (new course)");
+    const courseId = location.hash.split("/")[2];
+    type(T("course.name"), `Coach progress test ${Date.now()}`);
+    click(T("course.add-module")); await sleep(200);
+    click(T("course.add-lesson")); await sleep(300);
+    click(T("course.add-lesson")); await sleep(300);
+    click(T("course.publish")); await sleep(300);
+    const { flushSyncNow } = await import("/src/services/courseSync.js");
+    await flushSyncNow(courseId);
+    const lessons = load("courses").find((c) => c.id === courseId).modules[0].lessons;
+    ok(lessons.length === 2, `setup: the course has 2 lessons on the backend (${lessons.length})`);
+    await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
+    await apiPost(`/courses/${courseId}/enroll`, {});
+    const { completeLesson } = await import("/src/services/learning.js");
+    completeLesson("u-maya", courseId, lessons[0].id);
+    let done = null;
+    for (let i = 0; i < 30 && !done; i++) { const rows = await apiGet(`/courses/${courseId}/progress/detail`); done = rows?.find((r) => r.lessonId === lessons[0].id && r.status === "COMPLETED") || null; if (!done) await sleep(400); }
+    ok(!!done, "setup: lesson 1 of 2 is completed on the backend");
+    return { courseId, lesson1: lessons[0].id, lesson2: lessons[1].id };
+  };
+
   // Context: compact, bounded, own data only, no secrets.
   suites.coachContext = async () => {
+    const { courseId, lesson2 } = await suites.__inProgressCourse();
     await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
     const c = await apiGet("/coach/context");
     ok(!!c && c.learner?.id === "u-maya" && Array.isArray(c.courses) && Array.isArray(c.skills) && Array.isArray(c.journeys) && Array.isArray(c.recommendations), "context assembles learner, courses, skills, journeys and recommendations");
     ok(c.courses.length <= 12 && c.availableCourses.length <= 8 && c.recentActivity.length <= 6 && c.skills.length <= 10, "context lists are bounded");
     const s = JSON.stringify(c).toLowerCase();
     ok(!s.includes("password") && !s.includes("token") && !s.includes("apikey") && !s.includes("u-omar") && !s.includes("u-sam"), "context carries no credentials and no other learner's data");
-    const inProg = c.courses.find((x) => x.status === "in-progress");
-    ok(!!inProg && inProg.nextLesson?.lessonId && typeof inProg.pct === "number" && inProg.done <= inProg.total, "in-progress course carries progress numbers and its next lesson: " + inProg?.title);
+    const inProg = c.courses.find((x) => x.courseId === courseId);
+    ok(!!inProg && inProg.status === "in-progress" && inProg.nextLesson?.lessonId === lesson2 && typeof inProg.pct === "number" && inProg.done === 1 && inProg.total === 2, "the half-finished course is in progress with lesson 2 as the next lesson: " + inProg?.title);
     ok(c.skills.every((k) => k.name && k.level && typeof k.gapPct === "number"), "skills carry level labels and gaps from the Skills Engine");
     ok(c.aiProvider === "mock" && c.aiAvailable === true, "context reports the AI provider (mock) availability");
   };
@@ -189,9 +215,11 @@ export function registerCoach({ suites, log, ok, sleep, q, click, type, waitFor,
 
   // Learning plan: manual plan lifecycle with lesson-backed completion.
   suites.learningPlan = async () => {
+    const { courseId } = await suites.__inProgressCourse();
     await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
     const c = await apiGet("/coach/context");
-    const course = c.courses.find((x) => x.status === "in-progress" && x.nextLesson);
+    const course = c.courses.find((x) => x.courseId === courseId);
+    ok(!!course && course.status === "in-progress" && !!course.nextLesson, "setup: the fresh course is in the coach context with a next lesson");
     const plan = await (await apiPost("/learning-plans", { minutes: 30, courseId: course.courseId })).json();
     ok(plan.status === "DRAFT" && plan.items[0].lessonId === course.nextLesson.lessonId && plan.items.reduce((n, i) => n + i.minutes, 0) <= 30, "30-minute plan starts with the course's next lesson and fits the budget");
     await settled();

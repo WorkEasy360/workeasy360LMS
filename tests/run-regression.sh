@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runs the in-browser regression suites one at a time in headless Chrome and writes a summary.
 #
-#   bash tests/run-regression.sh                          # the full regression (70 suites)
+#   bash tests/run-regression.sh                          # the full regression (71 suites)
 #   bash tests/run-regression.sh "instructor builder" "learner quiz"
 #
 # Requirements: frontend served by serve.ps1 (it provides the /__log endpoint the suites report to), backend running
@@ -43,20 +43,20 @@ ALL=(
   "learner coachPersist" "admin adminUsers" "instructor assignLearner" "instructor notificationsBackend"
   "instructor platformAdmin" "instructor searchScope" "learner responsive" "admin accountLogin"
   "learner signup" "learner freeCourseAccess" "learner paidCourseLock" "learner purchaseFlow" "learner purchaseFailures"
-  "learner agent" "admin brand" "learner certificate"
+  "learner agent" "admin brand" "learner certificate" "admin passwordReset"
 )
 [ $# -gt 0 ] && SUITES=("$@") || SUITES=("${ALL[@]}")
 
-# Stops every browser process started for one profile. A plain `kill` only stops the launcher on Windows, and a
-# surviving browser would keep acting as the demo user during the next suite. The launcher's pid is signalled only
-# while it is still a running job of this shell: on Windows (Git Bash) it is a real Windows PID, and once the
-# launcher has exited Windows can hand that PID to another program (a PostgreSQL backend was killed that way).
+# Stops every browser process started for one profile, matched by the unique profile tag in its command line —
+# never by bare PID. On Windows a PID can be reused the moment its process exits, and signalling a stale one has
+# twice taken down an unrelated process (a PostgreSQL backend both times, killing the database mid-run). The tag
+# match covers the launcher too, so no raw `kill $pid` is needed where PowerShell exists.
 stop_browser() {
   local pid=$1 tag=$2
-  jobs -pr | grep -qx "$pid" && kill "$pid" 2>/dev/null
   if command -v powershell > /dev/null 2>&1; then
     powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | Where-Object { \$_.CommandLine -like '*${tag}*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" > /dev/null 2>&1
   else
+    jobs -pr | grep -qx "$pid" && kill "$pid" 2>/dev/null
     pkill -f "$tag" 2>/dev/null
   fi
 }

@@ -99,8 +99,10 @@ public class CertificateService {
         certificates.save(c);
     }
 
-    public Certificate renew(String id) {
+    public Certificate renew(com.workeasy360.backend.security.CurrentUser user, String id) {
         Certificate c = certificates.findById(id).orElseThrow(() -> ApiException.notFound("Certificate"));
+        boolean admin = user.getRole() == com.workeasy360.backend.domain.Enums.Role.ADMIN;
+        if (!admin && !c.getUserId().equals(user.getId())) throw ApiException.forbidden("Only the certificate's owner or an admin can renew it");
         Course course = courses.findById(c.getCourseId()).orElseThrow(() -> ApiException.notFound("Course"));
         if (course.getCertExpiryMonths() == null || course.getCertExpiryMonths() <= 0) throw ApiException.badRequest("This certificate does not expire");
         Instant now = Instant.now();

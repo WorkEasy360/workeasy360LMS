@@ -131,8 +131,15 @@ function mergeIncomingCourses(trees) {
   const incoming = trees.filter(Boolean).map(toLocalCourse);
   const local = load("courses");
   const byId = new Map(local.map((c) => [c.id, c]));
+  const editing = (location.hash.match(/^#\/builder\/([^/?]+)/) || [])[1];
   incoming.forEach((c) => {
     const existing = byId.get(c.id);
+    // Never replace a course with unsynced local edits, nor the one open in the Course Builder right now: the
+    // incoming copy predates those edits, and the Builder (including its open dialogs) holds references into the
+    // existing object — replacing it mid-edit silently discards what the instructor is working on. The next push
+    // reconciles the server from the local tree instead. (The server's own updatedAt is set on each push, so the
+    // timestamp comparison alone cannot protect an edit made while a push was in flight.)
+    if (existing && (timers.has(c.id) || inflight.has(c.id) || c.id === editing)) return;
     if (!existing || (c.updatedAt || 0) >= (existing.updatedAt || 0)) byId.set(c.id, c);
   });
   replace("courses", [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt));

@@ -1,6 +1,6 @@
 // Learning analytics suites (run one at a time: index.html?as=<role>&selftest=<suite>). Each suite drives the
 // real UI against the Java backend and cross-checks what the screen shows with what the API returns.
-import { loginReal, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD } from "/src/lib/store.js";
+import { loginReal, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, load } from "/src/lib/store.js";
 
 export function registerAnalytics({ suites, log, ok, sleep, q, click, type, waitFor, navigate }) {
   const T = (t) => q(`[data-guide-target="${t}"]`);
@@ -58,6 +58,9 @@ export function registerAnalytics({ suites, log, ok, sleep, q, click, type, wait
     await loginReal(DEMO_EMAIL_BY_ROLE.instructor, DEMO_PASSWORD);
     navigate("/analytics"); await loaded();
     ok(q('[data-analytics-scope="my-courses"]'), "instructor overview is scoped to their courses");
+    // The page defaults to "Last 30 days" while this test compares against the unfiltered (all-time) API — and the
+    // seeded activity ages out of any window eventually. Compare like with like: switch the page to all time.
+    setSelect(q('[data-analytics-filter="range"]'), "all"); await sleep(100); await loaded();
     await tab("Courses");
     const mine = await apiGet("/analytics/courses");
     ok(mine.length > 0 && mine.every((c) => c.instructorId === "u-daniel"), `API lists only Daniel's courses (${mine.length})`);
@@ -125,12 +128,16 @@ export function registerAnalytics({ suites, log, ok, sleep, q, click, type, wait
     const { courseId, lessonId } = await suites.__createMappedCourse("quiz", undefined, 40);
     await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
     const { saveQuizResult } = await import("/src/services/learning.js");
-    saveQuizResult("u-maya", courseId, lessonId, { score: 40, passed: false }); await sleep(500);
-    saveQuizResult("u-maya", courseId, lessonId, { score: 100, passed: true }); await sleep(800);
+    // The backend scores attempts from the submitted answers (never the claimed score): one wrong answer (0%,
+    // failed) and one right answer (100%, passed) → 2 attempts, 50% pass rate, 50% average.
+    const quiz = load("courses").find((c) => c.id === courseId).modules[0].lessons[0].quiz;
+    const qq = quiz.questions[0], wrongOption = qq.options.find((o) => o.id !== qq.answer).id;
+    saveQuizResult("u-maya", courseId, lessonId, { score: 40, passed: false, answers: { [qq.id]: wrongOption } }); await sleep(500);
+    saveQuizResult("u-maya", courseId, lessonId, { score: 100, passed: true, answers: { [qq.id]: qq.answer } }); await sleep(800);
     await loginReal(DEMO_EMAIL_BY_ROLE.instructor, DEMO_PASSWORD);
     let cs = null;
     for (let i = 0; i < 10 && !(cs && cs.quizAttempts === 2); i++) { await sleep(400); cs = await apiGet(`/analytics/courses/${courseId}`); }
-    ok(cs.quizAttempts === 2 && cs.quizPassRate === 50 && cs.avgQuizScore === 70, `quiz metrics: 2 attempts, 50% pass rate, avg 70% (got ${cs.quizAttempts}/${cs.quizPassRate}/${cs.avgQuizScore})`);
+    ok(cs.quizAttempts === 2 && cs.quizPassRate === 50 && cs.avgQuizScore === 50, `quiz metrics: 2 attempts, 50% pass rate, avg 50% (got ${cs.quizAttempts}/${cs.quizPassRate}/${cs.avgQuizScore})`);
     const a = await suites.__createMappedCourse("assignment", undefined, 20);
     await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
     navigate(`/learn/${a.courseId}/${a.lessonId}`); await waitFor(() => q('textarea[aria-label="Your submission"]'), 5000, "assignment");

@@ -150,7 +150,9 @@ export function registerSkills({ suites, log, ok, sleep, q, click, type, waitFor
     const { saveQuizResult, completeLesson } = await import("/src/services/learning.js");
     const before = ((await apiGet("/me/skills")) || []).find((s) => s.skillId === skillId);
     const basePts = before?.progressPercentage || 0;
-    saveQuizResult("u-maya", courseId, lessonId, { score: 100, passed: true });
+    // The attempt carries the actual answers: the backend scores them itself and ignores the claimed score.
+    const quiz = load("courses").find((c) => c.id === courseId).modules[0].lessons[0].quiz;
+    saveQuizResult("u-maya", courseId, lessonId, { score: 100, passed: true, answers: Object.fromEntries(quiz.questions.map((qq) => [qq.id, qq.answer])) });
     let mine = null;
     const has = (source, refId) => mine && mine.evidence.some((e) => e.source === source && e.refId === refId);
     for (let i = 0; i < 10 && !has("quiz", lessonId); i++) { await sleep(400); mine = ((await apiGet("/me/skills")) || []).find((s) => s.skillId === skillId); }

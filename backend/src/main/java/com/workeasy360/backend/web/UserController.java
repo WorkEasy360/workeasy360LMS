@@ -27,7 +27,12 @@ public class UserController {
     public record CreatedUser(UserDto user, String temporaryPassword) {}
 
     private final UserRepo users; private final PermissionService perm; private final PasswordEncoder encoder;
-    public UserController(UserRepo users, PermissionService perm, PasswordEncoder encoder) { this.users = users; this.perm = perm; this.encoder = encoder; }
+    private final com.workeasy360.backend.service.PasswordResetService passwordResets;
+    private final com.workeasy360.backend.service.MailService mail;
+    public UserController(UserRepo users, PermissionService perm, PasswordEncoder encoder,
+                          com.workeasy360.backend.service.PasswordResetService passwordResets, com.workeasy360.backend.service.MailService mail) {
+        this.users = users; this.perm = perm; this.encoder = encoder; this.passwordResets = passwordResets; this.mail = mail;
+    }
 
     private UserDto view(CurrentUser me, User u) {
         UserDto d = UserDto.of(u);
@@ -77,6 +82,28 @@ public class UserController {
         if (req.status() != null && List.of("ACTIVE", "INACTIVE").contains(req.status().toUpperCase())) u.setStatus(req.status().toUpperCase());
         u.setUpdatedAt(Instant.now());
         return UserDto.of(users.save(u));
+    }
+
+    /** Admin-issued password reset: returns the reset path once, for the admin to hand over (and e-mails it to the
+     *  person when this server sends e-mail). The link behaves exactly like a self-service one: 60 minutes, single use. */
+    public record ResetToken(String resetPath, int expiresMinutes, boolean emailed) {}
+
+    @PostMapping("/{id}/reset-token")
+    public ResetToken resetToken(@AuthenticationPrincipal CurrentUser me, @PathVariable String id) {
+        if (!perm.isAdmin(me)) throw ApiException.forbidden("Only an admin can issue a password reset");
+        User u = users.findById(id).orElseThrow(() -> ApiException.notFound("User"));
+        String token = passwordResets.issue(u.getId(), me.getId());
+        String path = "#/reset/" + token;
+        boolean emailed = mail.enabled();
+        if (emailed) {
+            String base = mail.publicUrl();
+            mail.send(u.getEmail(), "Reset your WorkEasy360 LMS password",
+                    "Hi " + u.getName() + ",\n\nYour administrator issued a password reset for your account.\n\n"
+                    + "Set a new password here (the link works for " + com.workeasy360.backend.service.PasswordResetService.EXPIRY_MINUTES + " minutes):\n"
+                    + (base.isBlank() ? "" : base + "/") + path
+                    + "\n\nIf you didn't expect this, contact your administrator.");
+        }
+        return new ResetToken(path, com.workeasy360.backend.service.PasswordResetService.EXPIRY_MINUTES, emailed);
     }
 
     private static Role parseRole(String r) { try { return Role.valueOf((r == null ? "LEARNER" : r).trim().toUpperCase()); } catch (IllegalArgumentException e) { throw ApiException.badRequest("Role must be learner, instructor or admin"); } }

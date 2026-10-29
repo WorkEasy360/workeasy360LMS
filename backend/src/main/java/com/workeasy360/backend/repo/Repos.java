@@ -143,6 +143,11 @@ public class Repos {
         List<Notification> findByUserIdOrderByAtDesc(String userId);
     }
 
+    public interface PasswordResetRepo extends JpaRepository<PasswordReset, String> {
+        java.util.Optional<PasswordReset> findByTokenHash(String tokenHash);
+        List<PasswordReset> findByUserIdAndUsedAtIsNull(String userId);
+    }
+
     // ---- skills engine ----
     public interface SkillCategoryRepo extends JpaRepository<SkillEntities.SkillCategory, String> {}
     public interface SkillRepo extends JpaRepository<SkillEntities.Skill, String> {}

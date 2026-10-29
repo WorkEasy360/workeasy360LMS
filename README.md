@@ -70,8 +70,14 @@ unexpected errors return a generic 500 without internals. Flyway runs at startup
 Login (`POST /api/auth/login`) returns an HS256 JWT (`JWT_SECRET`, expiry `JWT_EXPIRY_MINUTES`) sent as
 `Authorization: Bearer …`. Passwords are BCrypt-hashed. Only `/api/auth/**`, certificate verification and the API docs
 are public. A missing, expired or invalid token yields `401`; a valid token with the wrong role yields `403`. Deactivated people (`status = INACTIVE`) cannot sign in. Ownership is checked server-side for every
-per-user resource (progress, notifications, coach conversations, plans, submissions); e-mail addresses are only
-disclosed to admins and to the person themself.
+per-user resource (progress, notifications, coach conversations, plans, submissions, certificate renewal); e-mail
+addresses are only disclosed to admins and to the person themself.
+
+Hardening the server enforces regardless of the client: quiz attempts are **scored server-side** from the submitted
+answers against the stored quiz (a client-reported score is never trusted); 10 failed sign-ins pause an account for
+15 minutes (`429`); community posts/comments reject colliding ids (same author → idempotent re-push, anyone else →
+`403`) and over-length content (`400`); external video links must be absolute `http(s)` URLs; a write the database
+refuses maps to `400`, never a `500`. When a session expires mid-use, the app signs out and returns to sign-in.
 
 ## 4. Database and migrations
 
@@ -100,6 +106,9 @@ Copy `backend/.env.example` and export the values (never commit real secrets).
 | `JWT_SECRET` | none (**required**) | HS256 signing secret, random, 32+ characters. The backend refuses to start without it on any profile except `dev`, where a random per-run key is generated if it is unset. Generate one with `openssl rand -base64 48`; keep it in the environment or an untracked `backend/.env`. |
 | `JWT_EXPIRY_MINUTES` | `720` | Token lifetime |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated frontend origins |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | none, `587` | Outgoing e-mail. Leave `SMTP_HOST` empty to run without e-mail: notifications stay in-app and password resets are handed over by an admin |
+| `SMTP_FROM`, `SMTP_STARTTLS` | `SMTP_USERNAME`, `true` | Sender address; STARTTLS on by default |
+| `APP_PUBLIC_URL` | none | Absolute base for links in e-mails (e.g. `https://lms.example.com`). Required for usable reset links in mails |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` | `localhost`, `5432`, `we360`, `we360`, `we360` | PostgreSQL connection (postgres profile) |
 | `FILE_STORAGE_PATH` | `./storage` | Folder for uploaded videos |
 | `MAX_VIDEO_MB` | `500` | Hard upload limit (admins can set a lower one in Settings) |
@@ -179,7 +188,15 @@ Notifications are stored on the backend (`notifications` table) and delivered in
 happen: enrolment by an instructor/admin, assignment reviewed, discussion reply, course completed/certificate issued.
 Reminder rules run at sign-in and never repeat within their window: due within 3 days/overdue (daily), certificate
 expiring within 60 days/expired (weekly). Admins switch each rule on/off under **Automation** (persisted in
-`settings.automation_json`). No e-mail is sent.
+`settings.automation_json`). With SMTP configured (§5), every newly created notification is also e-mailed to the
+person (same rules, same dedupe); without SMTP everything stays in-app.
+
+**Password resets.** "Forgot password?" on the sign-in page (`POST /api/auth/forgot`) e-mails a reset link when SMTP
+is configured and always answers the same way, so it never reveals whether an account exists. Admins can issue a
+one-time reset link for anyone from **People → Edit → Password reset link** (`POST /api/users/{id}/reset-token`) —
+the no-SMTP path. Links hold 32 random bytes (only their SHA-256 is stored), work once, expire after 60 minutes, and
+a new link retires the old one; setting the password signs the person in (`POST /api/auth/reset`) and clears any
+brute-force lock. Reset requests are throttled per address (3/hour).
 
 ## 8. Video storage
 
@@ -221,7 +238,7 @@ provider and CORS without secrets.
 | --- | --- |
 | Backend compile | `cd backend && mvn -q -DskipTests compile` |
 | API smoke / security | curl against `/api/...` (401 without token, 403 for wrong role, 404/409 guards) |
-| Browser regression (70 suites) | `index.html?as=<role>&selftest=<suite>` — see below |
+| Browser regression (71 suites) | `index.html?as=<role>&selftest=<suite>` — see below |
 
 Browser suites live in `tests/` (`selftest.js` registers `suites_video.js`, `suites_skills.js`,
 `suites_analytics.js`, `suites_ai.js`, `suites_coach.js`, `suites_commerce.js`, `suites_agent.js`,
@@ -231,7 +248,7 @@ running backend, log to `tests/last-run.log` through the dev server's `/__log` e
 the demo data seeded, and Chrome. Run them **one at a time** (they share the log and the demo accounts):
 
 ```
-bash tests/run-regression.sh                        # all 70 suites, sequential; summary in tests/regression-result.txt
+bash tests/run-regression.sh                        # all 71 suites, sequential; summary in tests/regression-result.txt
 bash tests/run-regression.sh "instructor builder"   # selected suites
 CHROME="/path/to/chrome" BASE_URL=http://localhost:5173 bash tests/run-regression.sh
 ```
@@ -242,7 +259,7 @@ development database, never production.
 Suite → launch role: instructor — guide, builder, perms, review, video, addvideo, backendE2E, guideBackend, smoke,
 skillMapping, analyticsInstructor, guideAnalyticsBackend, aiCourseInstructor, aiQuiz, aiValidation, aiProvider,
 aiPersist, assignLearner, notificationsBackend, platformAdmin, searchScope; admin — video, smoke, skillsAdmin,
-analyticsAdmin, analyticsFilters, seedConsistency, guideAnalyticsPersist, aiCourseAdmin, adminUsers, accountLogin,
+analyticsAdmin, analyticsFilters, seedConsistency, guideAnalyticsPersist, aiCourseAdmin, adminUsers, accountLogin, passwordReset,
 brand (palette, logo, agent for admins, phone width); learner —
 learnerguide, player, quiz, community, smoke, quizBackend, assignmentBackend, communityBackend, videoResume,
 certVerify, quizFresh, skillProgress, skillQuizEvidence, journey, skillsPersist, analyticsLearner, analyticsFunnel,

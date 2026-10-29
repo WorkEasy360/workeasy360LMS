@@ -39,6 +39,11 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
+    <!-- Outgoing e-mail (password resets, notification mails); optional at runtime, enabled by SMTP_HOST. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-mail</artifactId>
+    </dependency>
 
     <!-- Local dev database: H2, file-persistent, PostgreSQL compatibility mode (see application.yml). -->
     <dependency>

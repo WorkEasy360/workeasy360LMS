@@ -33,8 +33,9 @@ async function request(path, { method = "GET", body, form, headers = {}, keepali
   }
   if (res.status === 401) {
     // Only the token this request was sent with can be declared expired: a request that left before sign-in
-    // finished (no token, or an older one) must not wipe the token a newer sign-in has stored since.
-    if (token && getToken() === token) onUnauthorized();
+    // finished (no token, or an older one) must not wipe the token a newer sign-in has stored since. A 401 from
+    // the login/register endpoints means bad credentials, not an expired session, so it never signs anyone out.
+    if (token && getToken() === token && !path.startsWith("/auth/login") && !path.startsWith("/auth/register")) onUnauthorized();
     throw new ApiError(401, token ? "Your session expired. Please sign in again." : "Sign in to continue.");
   }
   if (res.status === 204) return null;
@@ -55,6 +56,9 @@ export const api = {
   login: (email, password) => post("/auth/login", { email, password }),
   register: (name, email, password) => post("/auth/register", { name, email, password }), // public; always creates a LEARNER
   me: () => get("/auth/me"),
+  forgotPassword: (email) => post("/auth/forgot", { email }), // always 200; {sent} only says whether this server e-mails
+  resetPassword: (token, password) => post("/auth/reset", { token, password }), // signs in on success
+  userResetToken: (id) => post(`/users/${id}/reset-token`), // admin: one-time reset link (also e-mailed when SMTP is on)
 
   // users / settings
   users: (role) => get("/users" + (role ? `?role=${role}` : "")),

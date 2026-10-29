@@ -85,7 +85,7 @@ export function QuizRunner({ questions, passScore = 70, title = "Quiz", onFinish
   function result() {
     const r = scoreQuiz(questions, answers);
     const passed = r.score >= passScore;
-    if (!finished) { finished = true; onFinish?.({ ...r, passed }); }
+    if (!finished) { finished = true; onFinish?.({ ...r, answers, passed }); }
     const missed = r.results.filter((x) => !x.correct);
     return h("div", { class: "stack-lg quiz-result" }, [
       h("div", { class: "card card-pad center stack", style: "align-items:center" }, [

@@ -1,6 +1,6 @@
 // Final-milestone suites: backend notifications, admin user management, learner assignment, platform admin guards,
 // search scoping. Run one at a time: index.html?as=<role>&selftest=<suite> (roles noted per suite).
-import { loginReal, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, load } from "/src/lib/store.js";
+import { loginReal, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, load, logout, getUser } from "/src/lib/store.js";
 import { bus } from "/src/lib/events.js";
 
 export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitFor, navigate }) {
@@ -13,6 +13,61 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
   const apiDel = (path) => apiRaw(path, { method: "DELETE" });
   const json = async (r) => ({ status: r.status, body: await r.json().catch(() => null) });
   const settled = async () => { const t0 = Date.now(); let last = t0; const off = bus.on("route", () => (last = Date.now())); await waitFor(() => Date.now() - Math.max(last, t0) > 1500, 12000, "route quiet period"); off(); };
+
+  // Password reset: self-service request, admin-issued link, single use, expiry of old links, and the two public pages.
+  suites.passwordReset = async () => {
+    await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
+    const email = `reset.${Date.now().toString(36)}@workeasy360.dev`;
+    const created = (await json(await apiPost("/users", { name: "Reset Probe", email, role: "learner" }))).body;
+    const tempPassword = created.temporaryPassword;
+    ok(!!created.user?.id && !!tempPassword, "setup: person created with a temporary password");
+
+    // Self-service request: always 200, no account enumeration; this server has no SMTP so sent=false
+    const forgot = await json(await apiPost("/auth/forgot", { email }));
+    ok(forgot.status === 200 && forgot.body.sent === false, "forgot always answers 200; sent=false without a mail server");
+    const unknown = await json(await apiPost("/auth/forgot", { email: "who.is.this@workeasy360.dev" }));
+    ok(unknown.status === 200 && unknown.body.sent === forgot.body.sent, "an unknown address gets the identical answer (no enumeration)");
+    ok((await apiPost("/auth/forgot", { email: "not-an-email" })).status === 400, "a malformed address is refused");
+    const probe = `throttle.${Date.now().toString(36)}@workeasy360.dev`;
+    let last = 0; for (let i = 0; i < 4; i++) last = (await apiPost("/auth/forgot", { email: probe })).status;
+    ok(last === 429, "the 4th reset request for one address in an hour is throttled (429)");
+
+    // Admin-issued link (one per person at a time; a new link retires the previous one)
+    const stale = (await json(await apiPost(`/users/${created.user.id}/reset-token`))).body;
+    const fresh = (await json(await apiPost(`/users/${created.user.id}/reset-token`))).body;
+    ok(/^#\/reset\/[A-Za-z0-9_-]{40,}$/.test(fresh.resetPath) && fresh.expiresMinutes === 60 && fresh.emailed === false, "admin gets a one-time reset path (no e-mail server → handed over manually)");
+    const staleToken = stale.resetPath.split("/").pop(), freshToken = fresh.resetPath.split("/").pop();
+    ok((await apiPost("/auth/reset", { token: staleToken, password: "NewPass123" })).status === 400, "an older link stops working once a new one is issued");
+    ok((await apiPost("/auth/reset", { token: freshToken, password: "short" })).status === 400, "a weak password is refused");
+    const done = await json(await apiPost("/auth/reset", { token: freshToken, password: "NewPass123" }));
+    ok(done.status === 200 && done.body.user?.id === created.user.id && !!done.body.token, "the link sets the password and signs the person in");
+    ok((await apiPost("/auth/reset", { token: freshToken, password: "OtherPass123" })).status === 400, "a link only works once");
+    const oldLogin = await fetch("http://localhost:8080/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: tempPassword }) });
+    ok(oldLogin.status === 401, "the temporary password no longer works");
+    const newLogin = await fetch("http://localhost:8080/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: "NewPass123" }) });
+    ok(newLogin.status === 200, "the new password signs in");
+    // Only admins issue links
+    await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
+    ok((await apiPost(`/users/${created.user.id}/reset-token`)).status === 403, "a learner cannot issue reset links");
+
+    // The public pages: forgot (no-mail message) and reset (signs in with the new password)
+    await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
+    const ui = (await json(await apiPost(`/users/${created.user.id}/reset-token`))).body;
+    logout(); location.hash = "#/login";
+    await waitFor(() => q("[data-login-forgot]"), 4000, "login page");
+    ok(!!q("[data-login-forgot]"), "the sign-in page offers Forgot password?");
+    click(q("[data-login-forgot]"));
+    await waitFor(() => q("[data-forgot-email]"), 4000, "forgot page");
+    type(q("[data-forgot-email]"), email); click(q("[data-forgot-submit]"));
+    await waitFor(() => q("[data-forgot-done]"), 5000, "forgot confirmation");
+    ok(q("[data-forgot-done]")?.dataset.forgotDone === "no-mail" && /administrator/i.test(q("[data-forgot-done]").textContent), "without SMTP the page points at the administrator");
+    location.hash = "#/reset/" + ui.resetPath.split("/").pop();
+    await waitFor(() => q("[data-reset-password]"), 4000, "reset page");
+    type(q("[data-reset-password]"), "UiPass1234"); type(q("[data-reset-confirm]"), "UiPass1234");
+    click(q("[data-reset-submit]"));
+    await waitFor(() => getUser()?.id === created.user.id && location.hash === "#/", 8000, "signed in after reset");
+    ok(getUser()?.id === created.user.id, "setting a new password on the page signs the person straight in");
+  };
 
   /** A published course owned by the instructor with one text lesson (created through the real Builder + backend sync). */
   async function publishedCourse() {

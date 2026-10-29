@@ -5,7 +5,7 @@ import { Button } from "../components/Button.js";
 import { Badge, StatusBadge } from "../components/Badge.js";
 import { Progress, ProgressRing } from "../components/Progress.js";
 import { LessonCard } from "../components/Domain.js";
-import { EmptyState, ErrorState } from "../components/States.js";
+import { EmptyState, ErrorState, LoadingState } from "../components/States.js";
 import { Textarea, Field } from "../components/Form.js";
 import { openDrawer, toast } from "../components/Overlay.js";
 import { Composer, PostCard } from "../components/Post.js";
@@ -14,16 +14,25 @@ import { renderBlocks } from "../builder/blocks.js";
 import { getCourse, lessonsOf, findLesson, moduleOfLesson, courseTitle, LESSON_TYPES } from "../services/courses.js";
 import { enroll, getEnrollment, courseProgress, isLessonDone, isLessonUnlocked, nextLesson, completeLesson, saveQuizResult, submitAssignment, setNote, toggleBookmark } from "../services/learning.js";
 import { listPosts } from "../services/community.js";
-import { navigate } from "../router.js";
+import { navigate, refreshRoute } from "../router.js";
 import { recordVideoEvent, syncVideoProgress, getVideoProgress, completionThreshold, videoOf } from "../services/videos.js";
 import { hydrateLessonProgress } from "../services/learningSync.js";
+import { refreshCourse } from "../services/courseSync.js";
 import { bus } from "../lib/events.js";
 
 export function PlayerPage(ctx) {
   const user = ctx.user;
   const course = getCourse(ctx.params.courseId);
   if (!course || (course.status !== "published" && user.role === "learner")) {
-    return { title: "Course unavailable", crumbs: [{ label: "My Learning", href: "/my-learning" }, { label: "Unavailable" }], el: ErrorState({ title: "This course isn't available", description: "It may be unpublished or removed.", onRetry: () => navigate("/my-learning") }) };
+    // A deep link (bookmark, e-mail, second device) can arrive before this browser has ever seen the course:
+    // ask the backend for it before declaring it unavailable, and re-render when it lands.
+    const el = h("div", {}, LoadingState("Opening this course…"));
+    refreshCourse(ctx.params.courseId).then((tree) => {
+      if (!el.isConnected) return;
+      if (tree && (user.role !== "learner" || String(tree.status).toLowerCase() === "published")) return refreshRoute();
+      el.replaceChildren(ErrorState({ title: "This course isn't available", description: "It may be unpublished or removed.", onRetry: () => navigate("/my-learning") }));
+    });
+    return { title: "Course unavailable", crumbs: [{ label: "My Learning", href: "/my-learning" }, { label: "Unavailable" }], el };
   }
   // Paid course without an entitlement (purchase or assignment): the content is locked server-side and redacted locally.
   if (user.role === "learner" && (course.locked || (course.price > 0 && !getEnrollment(user.id, course.id)))) {

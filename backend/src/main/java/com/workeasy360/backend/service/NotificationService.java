@@ -25,9 +25,12 @@ import java.util.List;
 public class NotificationService {
     private final NotificationRepo notifications; private final SettingsRepo settingsRepo;
     private final EnrollmentRepo enrollments; private final CertificateRepo certificates; private final CourseRepo courses;
+    private final UserRepo users; private final MailService mail;
 
-    public NotificationService(NotificationRepo notifications, SettingsRepo settingsRepo, EnrollmentRepo enrollments, CertificateRepo certificates, CourseRepo courses) {
+    public NotificationService(NotificationRepo notifications, SettingsRepo settingsRepo, EnrollmentRepo enrollments, CertificateRepo certificates, CourseRepo courses,
+                               UserRepo users, MailService mail) {
         this.notifications = notifications; this.settingsRepo = settingsRepo; this.enrollments = enrollments; this.certificates = certificates; this.courses = courses;
+        this.users = users; this.mail = mail;
     }
 
     public boolean ruleEnabled(String rule) {
@@ -45,7 +48,18 @@ public class NotificationService {
             if (n.getAt().isBefore(since)) break;
             if (n.getKind().equals(kind) && java.util.Objects.equals(n.getHref(), href) && java.util.Objects.equals(n.getTitle(), t)) return n;
         }
-        return notifications.save(Notification.builder().userId(userId).kind(kind).title(cut(title, 300)).body(cut(body, 1000)).href(cut(href, 300)).read(false).at(Instant.now()).build());
+        Notification saved = notifications.save(Notification.builder().userId(userId).kind(kind).title(cut(title, 300)).body(cut(body, 1000)).href(cut(href, 300)).read(false).at(Instant.now()).build());
+        // Mirror genuinely new notifications (the dedupe above already returned repeats) to e-mail when SMTP is
+        // configured. Governed by the same admin automation rules that created the notification in the first place.
+        if (mail.enabled()) {
+            String orgName = settingsRepo.findById("singleton").map(Settings::getOrgName).orElse("WorkEasy360 LMS");
+            String base = mail.publicUrl();
+            users.findById(userId).ifPresent(u -> mail.send(u.getEmail(), saved.getTitle(),
+                    "Hi " + u.getName() + ",\n\n" + (saved.getBody() == null || saved.getBody().isBlank() ? saved.getTitle() : saved.getBody())
+                    + (href == null || href.isBlank() || base.isBlank() ? "" : "\n\nOpen it here: " + base + "/#" + href)
+                    + "\n\n— " + orgName + " · WorkEasy360 LMS"));
+        }
+        return saved;
     }
     public Notification notify(String userId, String kind, String title, String body, String href) { return notify(userId, kind, title, body, href, Duration.ofHours(24)); }
 

@@ -37,6 +37,6 @@ public class CertificateController {
 
     @PostMapping("/{id}/renew")
     public CertificateDto renew(@AuthenticationPrincipal CurrentUser user, @PathVariable String id) {
-        return service.view(service.renew(id));
+        return service.view(service.renew(user, id));
     }
 }

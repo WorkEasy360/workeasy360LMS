@@ -47,6 +47,19 @@ public class CommunityService {
     }
 
     public Post createPost(String id, String authorId, String kind, String title, String body, String groupId, String courseId, String lessonId) {
+        // The client proposes the id (local-first sync re-pushes the same post after a reload). JPA save() would
+        // silently turn a colliding id into an UPDATE of someone else's post, so collisions are resolved here:
+        // same author → the already-stored post (idempotent re-push); someone else's id → refused.
+        if (id != null && !id.isBlank()) {
+            var existing = posts.findById(id);
+            if (existing.isPresent()) {
+                if (!existing.get().getAuthorId().equals(authorId)) throw ApiException.forbidden("That discussion already exists");
+                return existing.get();
+            }
+        } else id = "p-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        if ((title == null || title.isBlank()) && (body == null || body.isBlank())) throw ApiException.badRequest("Write something first");
+        if (title != null && title.length() > 300) throw ApiException.badRequest("Keep the title under 300 characters.");
+        if (body != null && body.length() > 20_000) throw ApiException.badRequest("Keep the post under 20,000 characters.");
         // A post may reference a course/lesson/group that only exists in the browser's offline demo data; keep the post
         // and drop the dangling reference instead of failing on the foreign key.
         if (groupId != null && !groups.existsById(groupId)) groupId = null;
@@ -60,6 +73,16 @@ public class CommunityService {
 
     public Comment addComment(String id, String postId, String authorId, String body, String parentId) {
         Post post = posts.findById(postId).orElseThrow(() -> ApiException.notFound("Post"));
+        if (id != null && !id.isBlank()) {
+            var existing = comments.findById(id); // same id-collision rules as posts
+            if (existing.isPresent()) {
+                if (!existing.get().getAuthorId().equals(authorId)) throw ApiException.forbidden("That comment already exists");
+                return existing.get(); // idempotent re-push: stored once, notified once
+            }
+        } else id = "cm-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        if (body == null || body.isBlank()) throw ApiException.badRequest("Write a comment first");
+        if (body.length() > 5_000) throw ApiException.badRequest("Keep the comment under 5,000 characters.");
+        if (parentId != null && !comments.existsById(parentId)) parentId = null; // dangling thread parent: keep the comment at top level
         Comment saved = comments.save(Comment.builder().id(id).postId(postId).authorId(authorId).body(body).parentId(parentId).build());
         // Notify the post author (and, for a threaded reply, the parent comment's author) - never the person replying.
         if (notifications.ruleEnabled("discussionReplies")) {
@@ -75,16 +98,22 @@ public class CommunityService {
     }
 
     public void togglePostReaction(String postId, String userId, String type) {
-        ReactionType t = ReactionType.valueOf(type.toUpperCase());
+        if (!posts.existsById(postId)) throw ApiException.notFound("Post");
+        ReactionType t = parseReaction(type);
         var existing = reactions.findByPostIdAndUserIdAndType(postId, userId, t);
         if (existing.isPresent()) reactions.delete(existing.get());
         else reactions.save(Reaction.builder().postId(postId).userId(userId).type(t).build());
     }
     public void toggleCommentReaction(String commentId, String userId, String type) {
-        ReactionType t = ReactionType.valueOf(type.toUpperCase());
+        if (!comments.existsById(commentId)) throw ApiException.notFound("Comment");
+        ReactionType t = parseReaction(type);
         var existing = reactions.findByCommentIdAndUserIdAndType(commentId, userId, t);
         if (existing.isPresent()) reactions.delete(existing.get());
         else reactions.save(Reaction.builder().commentId(commentId).userId(userId).type(t).build());
+    }
+    private ReactionType parseReaction(String type) {
+        try { return ReactionType.valueOf(type.toUpperCase()); }
+        catch (RuntimeException e) { throw ApiException.badRequest("Unknown reaction type"); }
     }
 
     public void togglePin(com.workeasy360.backend.security.CurrentUser user, String postId) {

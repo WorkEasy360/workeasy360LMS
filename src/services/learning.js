@@ -109,13 +109,14 @@ function snapshot(userId, courseId) {
   };
 }
 
-export function saveQuizResult(userId, courseId, lessonId, { score, passed }) {
+export function saveQuizResult(userId, courseId, lessonId, { score, passed, answers }) {
   const e = enroll(userId, courseId);
   const prev = e.quiz[lessonId];
   e.quiz[lessonId] = { score: Math.max(score, prev?.score ?? 0), last: score, passed: passed || !!prev?.passed, attempts: (prev?.attempts || 0) + 1, at: Date.now() };
   save("enrollments");
   bus.emit("quiz.completed", { userId, courseId, lessonId, score, passed });
-  bg("quiz attempt", api.submitQuizAttempt(lessonId, { responses: null, score, passed }).then(refreshMySkills)); // passed quiz = assessed evidence
+  // The answers go along so the backend can score the attempt itself; it never trusts a client-reported score.
+  bg("quiz attempt", api.submitQuizAttempt(lessonId, { responses: answers || null, score, passed }).then(refreshMySkills)); // passed quiz = assessed evidence
 }
 
 export function submitAssignment(userId, courseId, lessonId, text) {

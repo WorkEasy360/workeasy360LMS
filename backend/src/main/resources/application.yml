@@ -47,6 +47,14 @@ app:
     currency: ${PAYMENTS_CURRENCY:INR}
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  mail:                                      # outgoing e-mail; leave SMTP_HOST empty to run without e-mail
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}              # never persisted or exposed
+    from: ${SMTP_FROM:}                      # defaults to SMTP_USERNAME
+    starttls: ${SMTP_STARTTLS:true}
+  public-url: ${APP_PUBLIC_URL:}             # absolute base for links in e-mails, e.g. https://lms.example.com
 
 springdoc:
   swagger-ui:

@@ -122,4 +122,10 @@ export function registerSession(token, user) {
 
 export const isBackendOnline = () => !!getToken();
 
-setUnauthorizedHandler(() => setToken(null));
+// An expired or revoked token: end the session cleanly and return to sign-in, instead of leaving the person on a
+// page where every save quietly fails. api.js only calls this for a 401 on the token that is still current, and
+// never for /auth/login itself (a wrong password during re-login must not end the session in use).
+setUnauthorizedHandler(() => {
+  setToken(null);
+  if (getUser()) { logout(); location.hash = "#/login"; }
+});

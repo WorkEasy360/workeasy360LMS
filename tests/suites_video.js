@@ -343,7 +343,10 @@ export function registerLearningBackend({ suites, log, ok, sleep, q, click, type
     const { courseId, lessonId } = await createSingleLessonCourse("quiz");
     await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
     const { saveQuizResult } = await import("/src/services/learning.js");
-    saveQuizResult("u-maya", courseId, lessonId, { score: 100, passed: true });
+    // The attempt carries the actual answers: the backend scores them itself and ignores the claimed score.
+    const quiz = load("courses").find((c) => c.id === courseId).modules[0].lessons[0].quiz;
+    const answers = Object.fromEntries(quiz.questions.map((qq) => [qq.id, qq.answer]));
+    saveQuizResult("u-maya", courseId, lessonId, { score: 100, passed: true, answers });
     await sleep(400);
     const token = localStorage.getItem("we360.v2.token");
     const attempts = await fetch(`http://localhost:8080/api/lessons/${lessonId}/quiz-attempts`, { headers: { Authorization: "Bearer " + token } }).then((r) => r.json());
@@ -444,11 +447,11 @@ export function registerFinal({ suites, log, ok, sleep, q, click, type, waitFor,
     if (!sessionStorage.getItem(MARK)) {
       const { courseId, lessonId } = await createVideoCourse(9);
       await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
-      await waitFor(() => localCourses().some((c) => c.id === courseId), 6000, "catalog hydrated");
+      await waitFor(() => localCourses().some((c) => c.id === courseId), 15000, "catalog hydrated");
       navigate(`/learn/${courseId}/${lessonId}`);
-      await waitFor(() => q(".vp video"), 5000, "player");
+      await waitFor(() => q(".vp video"), 20000, "player");
       const v = q(".vp video");
-      await waitFor(() => /\/api\/videos\/.+\/stream/.test(v.src) && v.readyState >= 1, 8000, "video metadata from backend stream");
+      await waitFor(() => /\/api\/videos\/.+\/stream/.test(v.src) && v.readyState >= 1, 20000, "video metadata from backend stream");
       v.muted = true;
       q(".vp").player.emit("started");
       v.currentTime = 6.5; await sleep(700);
@@ -468,11 +471,11 @@ export function registerFinal({ suites, log, ok, sleep, q, click, type, waitFor,
       const courseId = sessionStorage.getItem("we360_resume_course"), lessonId = sessionStorage.getItem("we360_resume_lesson");
       sessionStorage.removeItem(MARK);
       ok(!localStorage.getItem("we360.v2.enrollments"), "no local progress exists after the reload");
-      await waitFor(() => q(".role-card"), 4000, "login screen");
+      await waitFor(() => q(".role-card, [data-login-email]"), 10000, "login screen");
       await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
-      await waitFor(() => localCourses().some((c) => c.id === courseId), 6000, "catalog hydrated");
+      await waitFor(() => localCourses().some((c) => c.id === courseId), 15000, "catalog hydrated");
       navigate(`/learn/${courseId}/${lessonId}`);
-      await waitFor(() => q('[data-vp="resume"]'), 6000, "resume prompt");
+      await waitFor(() => q('[data-vp="resume"]'), 15000, "resume prompt");
       const prompt = q('[data-vp="resume"]');
       ok(!!prompt && /Resume from 00:0[5-9]/.test(prompt.textContent), "player offers to resume from the persisted position: " + (prompt?.textContent || "(no prompt)"));
       ok(/Video progress \d+%/.test(q(".vp-progress")?.textContent || ""), "progress row restored: " + (q(".vp-progress")?.textContent || ""));

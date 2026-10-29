@@ -42,6 +42,12 @@ export async function createUser({ name, email, role, title, dept, password }) {
   return { user: userById(res.user.id), temporaryPassword: res.temporaryPassword, local: false };
 }
 
+/** Admin: issue a one-time password-reset link for a person (needs the backend; there is nothing to reset locally). */
+export async function requestPasswordReset(id) {
+  if (!isBackendOnline()) throw new Error("Password resets need the backend. Connect it and try again.");
+  return api.userResetToken(id);
+}
+
 /** Admin: change a person's role / title / team / status. */
 export async function updateUser(id, patch) {
   const u = userById(id);

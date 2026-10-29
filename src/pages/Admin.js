@@ -9,7 +9,7 @@ import { EmptyState, LoadingState, ErrorState } from "../components/States.js";
 import { Field, Input, Select, SearchInput, Switch } from "../components/Form.js";
 import { openModal, toast, confirmDialog } from "../components/Overlay.js";
 import { resetAll, logout, isBackendOnline } from "../lib/store.js";
-import { users, settings, updateSettings, createUser, updateUser, automationRules } from "../services/people.js";
+import { users, settings, updateSettings, createUser, updateUser, requestPasswordReset, automationRules } from "../services/people.js";
 import { enrollmentsFor, courseProgress } from "../services/learning.js";
 import { api } from "../services/api.js";
 import { guideEngine } from "../guide/GuideEngine.js";
@@ -68,8 +68,23 @@ export function PeoplePage(ctx) {
     const status = Select({ options: [{ value: "ACTIVE", label: "Active" }, { value: "INACTIVE", label: "Inactive (cannot sign in)" }], value: u.status === "INACTIVE" ? "INACTIVE" : "ACTIVE" });
     const err = h("div", { class: "hint", role: "alert", style: "color:var(--c-danger)", hidden: true });
     const self = ctx?.user?.id === u.id;
+    const resetBtn = Button({ label: "Password reset link", icon: "shield", variant: "ghost", size: "sm", attrs: { "data-people-reset": "" }, onClick: async () => {
+      resetBtn.disabled = true;
+      try {
+        const r = await requestPasswordReset(u.id);
+        const link = `${location.origin}${location.pathname}${r.resetPath}`;
+        openModal({ title: "Password reset link", size: "sm",
+          content: h("div", { class: "stack-sm" }, [
+            h("p", { class: "small" }, [`Hand this link to `, h("strong", {}, u.name), `. It works once, for ${r.expiresMinutes} minutes, and replaces any earlier link.`]),
+            h("code", { class: "small", style: "overflow-wrap:anywhere;display:block;padding:10px;background:var(--c-hover);border-radius:8px", "data-reset-link": "" }, link),
+            h("p", { class: "xs muted" }, r.emailed ? "It was also e-mailed to them." : "This server doesn't send e-mail, so share the link yourself (chat, in person)."),
+          ]),
+          footer: (c2) => [Button({ label: "Copy link", icon: "copy", onClick: async () => { try { await navigator.clipboard.writeText(link); toast("Link copied"); } catch { toast("Copy failed — select the link manually", { type: "error" }); } } }), Button({ label: "Done", variant: "primary", onClick: c2 })] });
+      } catch (ex) { err.textContent = ex.message || "Could not issue a reset link."; err.hidden = false; }
+      finally { resetBtn.disabled = false; }
+    } });
     openModal({ title: `Edit ${u.name}`, size: "sm",
-      content: h("div", { class: "stack" }, [Field({ label: "Role", hint: self ? "You can't change your own role." : null, control: roleSel }), Field({ label: "Title", control: title }), Field({ label: "Team", control: dept }), !self && Field({ label: "Status", control: status }), err]),
+      content: h("div", { class: "stack" }, [Field({ label: "Role", hint: self ? "You can't change your own role." : null, control: roleSel }), Field({ label: "Title", control: title }), Field({ label: "Team", control: dept }), !self && Field({ label: "Status", control: status }), h("div", { class: "row-sm" }, [resetBtn, h("span", { class: "xs muted" }, "For someone locked out of their account.")]), err]),
       footer: (close) => [Button({ label: "Cancel", onClick: close }), Button({ label: "Save", variant: "primary", attrs: { "data-people-save": "" }, onClick: async (e) => {
         const btn = e.currentTarget; btn.disabled = true;
         try {

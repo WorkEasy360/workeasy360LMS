@@ -49,7 +49,7 @@ export function LoginPage(root) {
   } }, [
     h("h2", { style: "font-size:18px" }, "Sign in"),
     Field({ label: "E-mail", control: email }), Field({ label: "Password", control: password }), error, submit,
-    h("p", { class: "small muted center", style: "margin:4px 0 0" }, ["Don't have an account? ", h("a", { href: "#/signup", "data-login-signup": "" }, "Create Account")]),
+    h("p", { class: "small muted center", style: "margin:4px 0 0" }, [h("a", { href: "#/forgot", "data-login-forgot": "" }, "Forgot password?"), " · Don't have an account? ", h("a", { href: "#/signup", "data-login-signup": "" }, "Create Account")]),
   ]);
 
   mount(root, h("div", { class: "login login-auth" }, [

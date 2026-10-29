@@ -57,14 +57,16 @@ public class VideoService {
         if (file.getSize() > maxBytes) throw ApiException.badRequest("That file is too large. The maximum is " + (maxBytes / 1024 / 1024) + " MB.");
         if (file.getSize() == 0) throw ApiException.badRequest("That file is empty.");
 
+        byte[] thumbBytes = null;
+        if (thumbnailBase64 != null && !thumbnailBase64.isBlank()) {
+            String b64 = thumbnailBase64.contains(",") ? thumbnailBase64.substring(thumbnailBase64.indexOf(',') + 1) : thumbnailBase64;
+            try { thumbBytes = Base64.getDecoder().decode(b64); }
+            catch (IllegalArgumentException e) { throw ApiException.badRequest("The thumbnail could not be read."); }
+            if (thumbBytes.length > 2 * 1024 * 1024) throw ApiException.badRequest("The thumbnail is too large (2 MB max)."); // the video has its own limit; its thumbnail must not smuggle more
+        }
         try {
             String key = storage.store(file.getInputStream(), "videos", file.getOriginalFilename());
-            String thumbKey = null;
-            if (thumbnailBase64 != null && !thumbnailBase64.isBlank()) {
-                String b64 = thumbnailBase64.contains(",") ? thumbnailBase64.substring(thumbnailBase64.indexOf(',') + 1) : thumbnailBase64;
-                byte[] bytes = Base64.getDecoder().decode(b64);
-                thumbKey = storage.store(new ByteArrayInputStream(bytes), "thumbs", "thumb.jpg");
-            }
+            String thumbKey = thumbBytes == null ? null : storage.store(new ByteArrayInputStream(thumbBytes), "thumbs", "thumb.jpg");
             Video v = Video.builder()
                     .ownerId(user.getId()).courseId(courseId).sourceType(VideoSourceType.NATIVE)
                     .storageKey(key).originalFileName(file.getOriginalFilename()).mimeType(file.getContentType())
@@ -81,9 +83,16 @@ public class VideoService {
 
     public Video addExternal(CurrentUser user, String courseId, String sourceType, String sourceUrl, String title) {
         requireCourseEdit(user, courseId);
+        // The URL ends up as an <iframe>/<video> src in every learner's browser: only absolute http(s) links
+        // (never javascript: or data:), and inside the column's length.
+        if (sourceUrl == null || sourceUrl.length() > 900 || !sourceUrl.matches("(?i)^https?://\\S+$"))
+            throw ApiException.badRequest("Enter a full video link starting with http:// or https://.");
+        VideoSourceType type;
+        try { type = VideoSourceType.valueOf(String.valueOf(sourceType).toUpperCase()); }
+        catch (RuntimeException e) { throw ApiException.badRequest("Unknown video source type."); }
         Video v = Video.builder().ownerId(user.getId()).courseId(courseId)
-                .sourceType(VideoSourceType.valueOf(sourceType.toUpperCase())).sourceUrl(sourceUrl)
-                .status(VideoStatus.READY).title(title == null ? "" : title).description("")
+                .sourceType(type).sourceUrl(sourceUrl)
+                .status(VideoStatus.READY).title(title == null ? "" : title.length() > 300 ? title.substring(0, 300) : title).description("")
                 .visibility(VideoVisibility.COURSE).captionsJson("[]").build();
         return videos.save(v);
     }
@@ -91,9 +100,12 @@ public class VideoService {
     public Video updateMeta(CurrentUser user, String id, String title, String description, String visibility) {
         Video v = get(id);
         requireCourseEdit(user, v.getCourseId());
-        if (title != null) v.setTitle(title);
+        if (title != null) v.setTitle(title.length() > 300 ? title.substring(0, 300) : title);
         if (description != null) v.setDescription(description);
-        if (visibility != null) v.setVisibility(VideoVisibility.valueOf(visibility.toUpperCase()));
+        if (visibility != null) {
+            try { v.setVisibility(VideoVisibility.valueOf(visibility.toUpperCase())); }
+            catch (RuntimeException e) { throw ApiException.badRequest("Unknown visibility."); }
+        }
         return videos.save(v);
     }
 

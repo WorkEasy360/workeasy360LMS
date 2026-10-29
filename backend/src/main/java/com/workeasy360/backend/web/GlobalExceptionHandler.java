@@ -47,6 +47,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "The request could not be read. Check the request body and parameters.", req);
     }
 
+    /** A write the database refused (too-long value, missing required field, vanished reference): the client's data, not a server fault. */
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleIntegrity(Exception ex, HttpServletRequest req) {
+        log.warn("Rejected write on {} {}: {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, "That couldn't be saved: a value is too long, missing, or refers to something that no longer exists.", req);
+    }
+
     @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiError> handleTooLarge(Exception ex, HttpServletRequest req) {
         return build(HttpStatus.PAYLOAD_TOO_LARGE, "That file is larger than this server accepts (MAX_VIDEO_MB).", req);

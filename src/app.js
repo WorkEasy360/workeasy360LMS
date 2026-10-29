@@ -18,6 +18,7 @@ import { createCourse } from "./services/courses.js";
 
 import { LoginPage } from "./pages/Login.js";
 import { SignupPage } from "./pages/Signup.js";
+import { ForgotPage, ResetPage } from "./pages/Reset.js";
 import { CheckoutPage } from "./pages/Checkout.js";
 import { DashboardPage } from "./pages/Dashboard.js";
 import { CourseListPage } from "./pages/CourseList.js";
@@ -47,6 +48,8 @@ const LEARNER = ["learner"];
 // path, page factory, options { roles, public }
 route("/login", null, { public: true, auth: true });
 route("/signup", null, { public: true, auth: true, signup: true });
+route("/forgot", null, { public: true, auth: true, forgot: true });
+route("/reset/:token", null, { public: true, auth: true, reset: true });
 route("/checkout/:orderId", CheckoutPage, { roles: ALL });
 route("/", DashboardPage, { roles: ALL });
 route("/courses", CourseListPage, { roles: AUTHOR });
@@ -110,6 +113,8 @@ function dispatch(match) {
     if (user) return navigate("/", { replace: true });
     showAuth();
     if (r.opts.signup) { SignupPage($("auth-root")); document.title = "Create account · WorkEasy360"; return; }
+    if (r.opts.forgot) { ForgotPage($("auth-root")); document.title = "Reset password · WorkEasy360"; return; }
+    if (r.opts.reset) { ResetPage($("auth-root"), match.params.token); document.title = "Choose a new password · WorkEasy360"; return; }
     LoginPage($("auth-root"));
     document.title = "Sign in · WorkEasy360";
     return;
