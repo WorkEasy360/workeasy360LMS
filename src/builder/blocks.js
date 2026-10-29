@@ -124,7 +124,8 @@ export function newBlock(type) {
 export const renderBlocks = (blocks, ctx = {}) => h("div", { class: "blocks stack" }, blocks.map((b) => (BLOCK_TYPES[b.type] ? BLOCK_TYPES[b.type].view(b, ctx) : null)));
 
 // ---------- video block ----------
-const placeholder = (text) => h("div", { class: "media-ph video-ph" }, [h("span", { class: "play-btn" }, ico("play", 28)), h("span", {}, text)]);
+// No play button here: this is a "nothing to play yet" notice, and a big play circle begs to be clicked.
+const placeholder = (text) => h("div", { class: "media-ph video-ph" }, [ico("video", 28), h("span", {}, text)]);
 
 function videoView(b, ctx) {
   const v = videoOf(b);

@@ -64,7 +64,9 @@ export function registerCommerce({ suites, log, ok, sleep, q, click, type, waitF
     await waitFor(() => q("#main") && q("#main").textContent.trim().length > 40, 8000, "home");
     ok(!!q("#main") && !!q(".sidebar") && /My Learning/.test(q(".sidebar").textContent), "learner Home renders with the learner navigation");
     // Demo tooling must not exist for a real account: no "View as" role switcher, no demo reset — only Sign out.
-    q(".user-btn").click(); await sleep(200);
+    // (The post-signup hydration can re-render the topbar and close the dropdown: open it again if that happened.)
+    q(".user-btn").click(); await sleep(300);
+    if (!q(".menu")) { q(".user-btn")?.click(); await waitFor(() => q(".menu"), 4000, "account menu"); }
     const menuText = q(".menu")?.textContent || "";
     ok(!/View as/.test(menuText) && !/Reset demo data/.test(menuText) && /Sign out/.test(menuText), "a real account's menu offers Sign out only — no demo role switcher");
     document.body.click(); await sleep(100);

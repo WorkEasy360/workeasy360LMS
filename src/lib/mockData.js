@@ -386,7 +386,7 @@ export function makeSeed() {
     { id: id("n"), userId: "u-priya", kind: "insight", title: "Security Awareness completion is at 56%", body: "Deadline is in 9 days.", href: "/analytics", at: now - 26 * 3600000, read: true },
   ];
 
-  const settings = { maxVideoMB: 200, instructorPublish: true, orgName: "Acme Corp", supportEmail: "learning@acme.example", certExpiryDefault: 12, guidesEnabled: true, communityEnabled: true, brandHue: 250 };
+  const settings = { maxVideoMB: 200, instructorPublish: true, orgName: "WorkEasy360", supportEmail: "support@workeasy360.com", certExpiryDefault: 12, guidesEnabled: true, communityEnabled: true, brandHue: 250 };
 
   // Historical guide analytics from other users so the admin view isn't empty
   const guideAnalytics = [];

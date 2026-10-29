@@ -90,7 +90,7 @@ export function QuizRunner({ questions, passScore = 70, title = "Quiz", onFinish
     return h("div", { class: "stack-lg quiz-result" }, [
       h("div", { class: "card card-pad center stack", style: "align-items:center" }, [
         ProgressRing(r.score, { size: 120, stroke: 10, color: passed ? "var(--c-success)" : "var(--c-warning)" }),
-        h("h2", { tabindex: "-1", id: "quiz-result-title" }, passed ? "You passed! 🎉" : "Almost there"),
+        h("h2", { tabindex: "-1", id: "quiz-result-title" }, passed ? "You passed! 🎉" : r.score >= passScore - 15 ? "Almost there" : r.score > 0 ? "Keep practising" : "Let's review and try again"),
         h("p", { class: "muted" }, `${r.correct} of ${r.total} correct · ${passScore}% needed to pass${preview ? " · preview only, not saved" : ""}`),
         // Recommended next action
         h("div", { class: "row wrap", style: "justify-content:center" }, [

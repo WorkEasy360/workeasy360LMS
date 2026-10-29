@@ -51,9 +51,11 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
     ok((await apiPost(`/users/${created.user.id}/reset-token`)).status === 403, "a learner cannot issue reset links");
 
-    // The public pages: forgot (no-mail message) and reset (signs in with the new password)
+    // The public pages: forgot (confirmation) and reset (signs in with the new password). The admin link is issued
+    // AFTER the forgot step: with a mail server configured, a forgot request issues a fresh token of its own, which
+    // would retire an admin link issued earlier (newest link wins, by design).
     await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
-    const ui = (await json(await apiPost(`/users/${created.user.id}/reset-token`))).body;
+    const adminToken = token();
     logout(); location.hash = "#/login";
     await waitFor(() => q("[data-login-forgot]"), 4000, "login page");
     ok(!!q("[data-login-forgot]"), "the sign-in page offers Forgot password?");
@@ -63,6 +65,7 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     await waitFor(() => q("[data-forgot-done]"), 5000, "forgot confirmation");
     ok(q("[data-forgot-done]")?.dataset.forgotDone === (mailOn ? "sent" : "no-mail"),
       mailOn ? "with SMTP the page says the link is on its way" : "without SMTP the page points at the administrator");
+    const ui = await fetch("http://localhost:8080/api/users/" + created.user.id + "/reset-token", { method: "POST", headers: { Authorization: "Bearer " + adminToken } }).then((r) => r.json());
     location.hash = "#/reset/" + ui.resetPath.split("/").pop();
     await waitFor(() => q("[data-reset-password]"), 4000, "reset page");
     type(q("[data-reset-password]"), "UiPass1234"); type(q("[data-reset-confirm]"), "UiPass1234");

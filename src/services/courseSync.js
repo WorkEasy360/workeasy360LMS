@@ -9,7 +9,7 @@
 // the server's and reconciles the difference in the background, debounced per course. Client-generated ids are
 // reused as the server's row ids (see backend CourseController et al.), so no id-translation layer is needed.
 import { api, ApiError } from "./api.js";
-import { isBackendOnline, load, replace } from "../lib/store.js";
+import { isBackendOnline, load, replace, getUser, DEMO_ENABLED } from "../lib/store.js";
 import { bus } from "../lib/events.js";
 
 const STATUS_TO_SERVER = { draft: "DRAFT", in_review: "IN_REVIEW", published: "PUBLISHED", archived: "ARCHIVED" };
@@ -142,6 +142,15 @@ function mergeIncomingCourses(trees) {
     if (existing && (timers.has(c.id) || inflight.has(c.id) || c.id === editing)) return;
     if (!existing || (c.updatedAt || 0) >= (existing.updatedAt || 0)) byId.set(c.id, c);
   });
+  // For learners and admins the server list is their complete view (catalogue + enrolments, or everything), so a
+  // course the server stopped returning — deleted or unpublished — must leave this cache too, or ghosts linger
+  // forever. Courses mid-edit keep the same guards as above. Instructors only receive their own courses here, so
+  // their copy of the wider catalogue is left untouched. Demo mode keeps its browser-only seed courses: the demo
+  // catalogue deliberately contains courses the backend never had.
+  if (!DEMO_ENABLED && getUser()?.role !== "instructor") {
+    const incomingIds = new Set(incoming.map((c) => c.id));
+    for (const c of [...byId.values()]) if (!incomingIds.has(c.id) && !timers.has(c.id) && !inflight.has(c.id) && c.id !== editing) byId.delete(c.id);
+  }
   replace("courses", [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt));
 }
 

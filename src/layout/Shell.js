@@ -134,7 +134,7 @@ function SearchBox(user) {
     if (e.key === "Escape") { close(); input.blur(); }
     else if (e.key === "ArrowDown" && hits.length) { e.preventDefault(); idx = (idx + 1) % hits.length; paint(); hits[idx].scrollIntoView({ block: "nearest" }); }
     else if (e.key === "ArrowUp" && hits.length) { e.preventDefault(); idx = (idx - 1 + hits.length) % hits.length; paint(); }
-    else if (e.key === "Enter" && hits[idx]) { e.preventDefault(); go(hits[idx]._hit); }
+    else if (e.key === "Enter" && (hits[idx] || hits[0])) { e.preventDefault(); go((hits[idx] || hits[0])._hit); } // Enter with no highlight opens the first result
   });
   document.addEventListener("mousedown", (e) => { if (!wrap.contains(e.target)) close(); });
   document.addEventListener("keydown", (e) => { if (e.key === "/" && !/input|textarea|select/i.test(document.activeElement?.tagName) && !document.activeElement?.isContentEditable) { e.preventDefault(); input.focus(); } });
@@ -171,6 +171,9 @@ export function setPage(page, path) {
   mount(main, h("div", { class: "page-inner" }, page.el));
   main.scrollTop = 0;
   document.body.classList.remove("nav-open");
+  // Navigating away closes any open modal or drawer: a dialog from the previous page must never sit on top of the
+  // next one (a certificate modal was surviving onto Community, covering the composer).
+  $("overlay-root")?.querySelectorAll(".scrim").forEach((s) => s.remove());
   updateAgent(path);
   const target = main.querySelector("#page-title, h1") || main;
   target.setAttribute("tabindex", "-1");

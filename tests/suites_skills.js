@@ -16,7 +16,7 @@ export function registerSkills({ suites, log, ok, sleep, q, click, type, waitFor
    *  through the real Course Builder UI: course skill (target level 3, weight 30) + lesson contribution.
    *  Without a `skillId`, the admin first creates a brand-new skill for this run, so repeated runs never pile
    *  evidence onto the shared seeded skills (which would saturate the demo learner at 100%). */
-  async function createMappedCourse(lessonType, skillId, contribution = 40) {
+  async function createMappedCourse(lessonType, skillId, contribution = 40, { extraLesson = false } = {}) {
     let skillName = skillId;
     if (!skillId) {
       await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
@@ -59,10 +59,11 @@ export function registerSkills({ suites, log, ok, sleep, q, click, type, waitFor
     click(chip(T("lesson.skills"), skillId)); await sleep(150);
     type(q(`[data-lesson-skill="${skillId}"] input`), String(contribution));
     click(T("lesson.save")); await sleep(200);
+    if (extraLesson) { click(T("course.add-lesson")); await sleep(300); } // a plain second lesson, so completing lesson 1 leaves the course in progress
     click(T("course.publish")); await sleep(300);
     await flushSyncNow(courseId);
-    const lessonId = load("courses").find((c) => c.id === courseId).modules[0].lessons[0].id;
-    return { courseId, lessonId, skillId, skillName };
+    const lessons = load("courses").find((c) => c.id === courseId).modules[0].lessons;
+    return { courseId, lessonId: lessons[0].id, lessonId2: lessons[1]?.id, skillId, skillName };
   }
   suites.__createMappedCourse = createMappedCourse;
 
@@ -168,8 +169,17 @@ export function registerSkills({ suites, log, ok, sleep, q, click, type, waitFor
 
   // 8-11. Journey states + next action on the course page, updating as a lesson is completed.
   suites.journey = async () => {
+    // A fresh 2-lesson mapped course of which the learner has finished exactly lesson 1: every journey state below
+    // is asserted on known data, not on whatever the demo learner has accumulated on the seeded courses.
+    const { courseId, lessonId } = await createMappedCourse("lesson", undefined, 40, { extraLesson: true });
     await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
-    navigate("/explore/c-crm"); await waitFor(() => T("journey.next"), 4000, "course detail");
+    await fetch(`http://localhost:8080/api/courses/${courseId}/enroll`, { method: "POST", headers: { Authorization: "Bearer " + token(), "Content-Type": "application/json" }, body: "{}" });
+    const { completeLesson } = await import("/src/services/learning.js");
+    completeLesson("u-maya", courseId, lessonId);
+    let synced = null;
+    for (let i = 0; i < 30 && !synced; i++) { const rows = await apiGet(`/courses/${courseId}/progress/detail`); synced = rows?.find((r) => r.lessonId === lessonId && r.status === "COMPLETED") || null; if (!synced) await sleep(400); }
+    ok(!!synced, "setup: lesson 1 of 2 completed on the backend");
+    navigate(`/explore/${courseId}`); await waitFor(() => T("journey.next"), 6000, "course detail");
     const statuses = () => [...document.querySelectorAll("[data-lj-node]")].map((n) => n.dataset.ljStatus);
     const s0 = statuses();
     ok(s0.includes("completed") && s0.filter((s) => s === "current").length >= 1, "journey shows completed and current nodes (" + s0.join(",") + ")");
@@ -181,10 +191,10 @@ export function registerSkills({ suites, log, ok, sleep, q, click, type, waitFor
     ok(q(".lj-detail") && /In progress/.test(q(".lj-detail").textContent), "selecting a node shows its status and next action (detail: " + (q(".lj-detail")?.textContent || "none").replace(/\s+/g, " ").slice(0, 120) + ")");
     ok(/Continue with/.test(T("journey.next").closest(".lj-next").textContent), "next-action CTA names the next lesson");
     click(T("journey.next")); await waitFor(() => T("player.complete"), 4000, "player from journey CTA");
-    ok(/^#\/learn\/c-crm\//.test(location.hash), "CTA opens the next lesson in the Player");
+    ok(new RegExp("^#/learn/" + courseId + "/").test(location.hash), "CTA opens the next lesson in the Player");
     click(T("player.complete")); await waitFor(() => q(".complete-card"), 3000, "completion card");
     const completedText = (q(".complete-card")?.textContent || "(no completion card)").replace(/\s+/g, " ").slice(0, 80);
-    navigate("/explore/c-crm"); await waitFor(() => T("journey.next"), 4000, "course detail again");
+    navigate(`/explore/${courseId}`); await waitFor(() => T("journey.next"), 4000, "course detail again");
     const s1 = statuses();
     ok(s1.filter((s) => s === "completed").length > s0.filter((s) => s === "completed").length, "completing a lesson moves a node to completed (" + s0.filter((s) => s === "completed").length + " → " + s1.filter((s) => s === "completed").length + "; card: " + completedText + ")");
     ok(!!q('[data-lj-node^="s:"]'), "skill nodes appear in the journey");

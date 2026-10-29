@@ -58,7 +58,7 @@ export function MyProgressPage(ctx) {
       h("section", { class: "stack", "data-guide-target": "progress.overview" }, [
         SectionTitle("What you've accomplished"),
         h("div", { class: "metric-grid" }, [
-          Stat({ id: "streak", label: "Learning streak", value: p.streakDays, icon: "flame", tone: "warning", format: (v) => `${Math.round(v)}d`, foot: `${p.activeDays30} active days in the last 30` }),
+          Stat({ id: "streak", label: "Learning streak", value: p.streakDays, icon: "flame", tone: "warning", format: (v) => `${Math.round(v)}d`, foot: `${p.activeDays30} active ${p.activeDays30 === 1 ? "day" : "days"} in the last 30` }),
           Stat({ id: "lessons", label: "Lessons completed", value: p.lessonsCompleted, icon: "check-circle", tone: "success", foot: `${p.minutesLearned} minutes learned` }),
           Stat({ id: "courses", label: "Courses completed", value: p.coursesCompleted, icon: "cap", foot: `${p.coursesInProgress} in progress` }),
           Stat({ id: "certificates", label: "Certificates", value: p.certificates, icon: "award", tone: "teal", foot: p.certificateList.some((c) => c.status === "EXPIRING") ? "One is expiring soon" : "All valid" }),

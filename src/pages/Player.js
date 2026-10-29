@@ -19,6 +19,7 @@ import { recordVideoEvent, syncVideoProgress, getVideoProgress, completionThresh
 import { hydrateLessonProgress } from "../services/learningSync.js";
 import { refreshCourse } from "../services/courseSync.js";
 import { bus } from "../lib/events.js";
+import { load } from "../lib/store.js";
 
 export function PlayerPage(ctx) {
   const user = ctx.user;
@@ -245,7 +246,18 @@ export function PlayerPage(ctx) {
     return h("section", { class: "complete-card", "aria-label": "Lesson completed" }, [
       h("h2", { tabindex: "-1" }, r.courseCompleted ? "🎉 Course complete!" : "Nice work!"),
       h("div", { class: "chain" }, steps),
-      r.courseCompleted && r.certificate && h("div", { class: "callout tip", style: "margin-top:16px" }, [ico("award", 18), h("div", { class: "grow" }, [h("strong", {}, "Your certificate is ready. "), r.certificate.id]), Button({ label: "View certificate", size: "sm", variant: "primary", href: "/certificates" })]),
+      r.courseCompleted && r.certificate && (() => {
+        // The card shows the provisional local number first; the backend's authoritative number replaces it the
+        // moment the progress save lands (certificate.reconciled). The button opens the certificate itself, looked
+        // up fresh at click time, so it always carries the number that verification will find.
+        const idEl = h("span", { "data-cert-number": "" }, r.certificate.id);
+        const off = bus.on("certificate.reconciled", ({ from, to }) => { if (idEl.textContent === from) idEl.textContent = to; if (!idEl.isConnected) off(); });
+        return h("div", { class: "callout tip", style: "margin-top:16px" }, [ico("award", 18), h("div", { class: "grow" }, [h("strong", {}, "Your certificate is ready. "), idEl]), Button({ label: "View certificate", size: "sm", variant: "primary", onClick: async () => {
+          const { openCertificate } = await import("./Certificates.js");
+          const cert = load("certificates").find((c) => c.userId === user.id && c.courseId === course.id);
+          cert ? openCertificate(cert) : navigate("/certificates");
+        } })]);
+      })(),
     ]);
   }
 

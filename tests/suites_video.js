@@ -534,7 +534,7 @@ export function registerFinal({ suites, log, ok, sleep, q, click, type, waitFor,
     check.click(); await sleep(150);
     ok(!!q(".qfeedback"), "feedback shown after Check answer");
     q('[data-quiz-action="next"]').click();
-    await waitFor(() => /You passed|Almost there/.test(q(".quiz")?.textContent || ""), 3000, "quiz result");
+    await waitFor(() => /You passed|Almost there|Keep practising|review and try again/.test(q(".quiz")?.textContent || ""), 3000, "quiz result");
     ok(/You passed/.test(q(".quiz").textContent), "result screen reached (passed)");
     let attempts = null; // the save is a background request; poll rather than assume a fixed latency
     for (let i = 0; i < 12 && !(attempts && attempts.length); i++) { await sleep(400); attempts = await apiGet(`/lessons/${lessonId}/quiz-attempts`); }

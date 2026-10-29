@@ -94,6 +94,8 @@ export function completeLesson(userId, courseId, lessonId) {
       if (server?.certificateId && result.certificate && server.certificateId !== result.certificate.id) {
         const cert = load("certificates").find((c) => c.id === result.certificate.id);
         if (cert) { cert.id = server.certificateId; save("certificates"); }
+        // Anything already showing the provisional number (the completion card) swaps to the real one.
+        bus.emit("certificate.reconciled", { from: result.certificate.id, to: server.certificateId, userId, courseId });
       }
       refreshMySkills();
     }).catch((err) => console.warn("[learning] progress sync failed:", err.message));
