@@ -29,23 +29,27 @@ public class MailService {
     public MailService(@Value("${app.mail.host:}") String host, @Value("${app.mail.port:587}") int port,
                        @Value("${app.mail.username:}") String username, @Value("${app.mail.password:}") String password,
                        @Value("${app.mail.from:}") String from, @Value("${app.mail.starttls:true}") boolean starttls,
-                       @Value("${app.public-url:}") String publicUrl) {
+                       @Value("${app.mail.ssl:}") String ssl, @Value("${app.public-url:}") String publicUrl) {
         this.from = !from.isBlank() ? from : username;
         this.publicUrl = publicUrl.endsWith("/") ? publicUrl.substring(0, publicUrl.length() - 1) : publicUrl;
         if (host.isBlank() || this.from.isBlank()) {
             this.sender = null;
         } else {
+            // Port 465 means implicit SSL from the first byte (Hostinger, Gmail, Zoho…); 587 means STARTTLS.
+            // SMTP_SSL overrides the port-based default either way.
+            boolean useSsl = ssl.isBlank() ? port == 465 : Boolean.parseBoolean(ssl);
             JavaMailSenderImpl s = new JavaMailSenderImpl();
             s.setHost(host); s.setPort(port);
             if (!username.isBlank()) { s.setUsername(username); s.setPassword(password); }
             Properties p = s.getJavaMailProperties();
             p.put("mail.smtp.auth", String.valueOf(!username.isBlank()));
-            p.put("mail.smtp.starttls.enable", String.valueOf(starttls));
+            p.put("mail.smtp.ssl.enable", String.valueOf(useSsl));
+            p.put("mail.smtp.starttls.enable", String.valueOf(!useSsl && starttls));
             p.put("mail.smtp.connectiontimeout", "10000");
             p.put("mail.smtp.timeout", "10000");
             p.put("mail.smtp.writetimeout", "10000");
             this.sender = s;
-            log.info("Outgoing e-mail enabled via {}:{} (from {})", host, port, this.from);
+            log.info("Outgoing e-mail enabled via {}:{} ({}, from {})", host, port, useSsl ? "SSL" : starttls ? "STARTTLS" : "plain", this.from);
         }
     }
 

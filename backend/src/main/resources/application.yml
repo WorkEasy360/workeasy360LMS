@@ -54,6 +54,7 @@ app:
     password: ${SMTP_PASSWORD:}              # never persisted or exposed
     from: ${SMTP_FROM:}                      # defaults to SMTP_USERNAME
     starttls: ${SMTP_STARTTLS:true}
+    ssl: ${SMTP_SSL:}                        # implicit SSL; defaults to true on port 465, false otherwise
   public-url: ${APP_PUBLIC_URL:}             # absolute base for links in e-mails, e.g. https://lms.example.com
 
 springdoc:

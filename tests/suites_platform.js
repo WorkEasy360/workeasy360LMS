@@ -22,9 +22,10 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     const tempPassword = created.temporaryPassword;
     ok(!!created.user?.id && !!tempPassword, "setup: person created with a temporary password");
 
-    // Self-service request: always 200, no account enumeration; this server has no SMTP so sent=false
+    // Self-service request: always 200, no account enumeration; `sent` only reflects whether this server has SMTP
     const forgot = await json(await apiPost("/auth/forgot", { email }));
-    ok(forgot.status === 200 && forgot.body.sent === false, "forgot always answers 200; sent=false without a mail server");
+    const mailOn = forgot.body?.sent === true;
+    ok(forgot.status === 200 && typeof forgot.body.sent === "boolean", `forgot always answers 200 (this server ${mailOn ? "sends e-mail" : "has no mail server"})`);
     const unknown = await json(await apiPost("/auth/forgot", { email: "who.is.this@workeasy360.dev" }));
     ok(unknown.status === 200 && unknown.body.sent === forgot.body.sent, "an unknown address gets the identical answer (no enumeration)");
     ok((await apiPost("/auth/forgot", { email: "not-an-email" })).status === 400, "a malformed address is refused");
@@ -35,7 +36,7 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     // Admin-issued link (one per person at a time; a new link retires the previous one)
     const stale = (await json(await apiPost(`/users/${created.user.id}/reset-token`))).body;
     const fresh = (await json(await apiPost(`/users/${created.user.id}/reset-token`))).body;
-    ok(/^#\/reset\/[A-Za-z0-9_-]{40,}$/.test(fresh.resetPath) && fresh.expiresMinutes === 60 && fresh.emailed === false, "admin gets a one-time reset path (no e-mail server → handed over manually)");
+    ok(/^#\/reset\/[A-Za-z0-9_-]{40,}$/.test(fresh.resetPath) && fresh.expiresMinutes === 60 && fresh.emailed === mailOn, `admin gets a one-time reset path (emailed=${fresh.emailed})`);
     const staleToken = stale.resetPath.split("/").pop(), freshToken = fresh.resetPath.split("/").pop();
     ok((await apiPost("/auth/reset", { token: staleToken, password: "NewPass123" })).status === 400, "an older link stops working once a new one is issued");
     ok((await apiPost("/auth/reset", { token: freshToken, password: "short" })).status === 400, "a weak password is refused");
@@ -60,7 +61,8 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     await waitFor(() => q("[data-forgot-email]"), 4000, "forgot page");
     type(q("[data-forgot-email]"), email); click(q("[data-forgot-submit]"));
     await waitFor(() => q("[data-forgot-done]"), 5000, "forgot confirmation");
-    ok(q("[data-forgot-done]")?.dataset.forgotDone === "no-mail" && /administrator/i.test(q("[data-forgot-done]").textContent), "without SMTP the page points at the administrator");
+    ok(q("[data-forgot-done]")?.dataset.forgotDone === (mailOn ? "sent" : "no-mail"),
+      mailOn ? "with SMTP the page says the link is on its way" : "without SMTP the page points at the administrator");
     location.hash = "#/reset/" + ui.resetPath.split("/").pop();
     await waitFor(() => q("[data-reset-password]"), 4000, "reset page");
     type(q("[data-reset-password]"), "UiPass1234"); type(q("[data-reset-confirm]"), "UiPass1234");
