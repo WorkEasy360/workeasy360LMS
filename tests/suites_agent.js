@@ -140,6 +140,21 @@ export function registerAgent({ suites, log, ok, sleep, q, click, type, waitFor,
     ok(/workeasy360-mark\.png$/.test(q("link[rel='icon']")?.getAttribute("href") || "") && q("meta[name='theme-color']")?.content === "#13222E", "favicon is the W mark, theme colour is navy");
     ok(/Priya/.test(q(".sidebar-user-name")?.textContent || "") && q(".sidebar-user-role")?.textContent === "Admin", "sidebar footer shows the signed-in person and role");
 
+    // Collapse / expand the sidebar (remembered per browser), as in Booking
+    const sideW = () => Math.round(q("#sidebar").getBoundingClientRect().width);
+    ok(sideW() === 248 && shown(q("[data-nav-collapse]")) && !shown(q("[data-nav-expand]")), `expanded sidebar (${sideW()}px) offers Collapse next to the logo`);
+    click(q("[data-nav-collapse]")); await sleep(100);
+    ok(document.body.classList.contains("nav-collapsed") && sideW() === 68, `Collapse shrinks the sidebar to icons (${sideW()}px)`);
+    ok(!shown(q("#sidebar .product-logo")) && shown(q("#sidebar .brand-compact")) && ![...document.querySelectorAll("#sidebar .nav-text")].some(shown), "collapsed: W mark only, no labels");
+    ok([...document.querySelectorAll("#sidebar .nav-item")].every((a) => shown(a) && a.title), "collapsed: every menu item stays visible with a tooltip");
+    ok(shown(q("[data-nav-expand]")) && document.activeElement === q("[data-nav-expand]"), "Expand appears at the bottom and receives focus");
+    ok(localStorage.getItem("we360.v2.navCollapsed") === "1", "the collapsed state is remembered");
+    click(q("[data-nav-expand]")); await sleep(100);
+    ok(!document.body.classList.contains("nav-collapsed") && sideW() === 248 && shown(q("#sidebar .product-logo")) && localStorage.getItem("we360.v2.navCollapsed") === "0" && document.activeElement === q("[data-nav-collapse]"), "Expand restores the full sidebar and focus");
+    const rules = [...document.styleSheets].flatMap((s) => { try { return [...s.cssRules]; } catch { return []; } });
+    const thumb = rules.find((r) => r.selectorText === "::-webkit-scrollbar-thumb");
+    ok(rules.some((r) => r.selectorText === "::-webkit-scrollbar" && r.style.width === "6px") && thumb?.style.borderRadius === "3px" && rules.some((r) => /::-webkit-scrollbar-track/.test(r.selectorText || "") && r.style.background.includes("transparent")), "thin rounded scrollbars with a transparent track");
+
     // The agent works for a non-learner role too
     click(launcher()); await waitFor(() => shown(panel()), 2000, "agent panel");
     const tours = [...document.querySelectorAll("[data-agent-tour]")].map((b) => b.dataset.agentTour);

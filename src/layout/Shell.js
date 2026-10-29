@@ -22,6 +22,14 @@ import { bus } from "../lib/events.js";
 
 const $ = (id) => document.getElementById(id);
 
+// Collapsed (icon-only) sidebar on desktop, remembered per browser — as in WorkEasy360 Booking.
+const NAV_COLLAPSED_KEY = "we360.v2.navCollapsed";
+function setNavCollapsed(on) {
+  document.body.classList.toggle("nav-collapsed", on);
+  try { localStorage.setItem(NAV_COLLAPSED_KEY, on ? "1" : "0"); } catch {}
+  $("sidebar").querySelector(on ? "[data-nav-expand]" : "[data-nav-collapse]")?.focus();
+}
+
 export function renderSidebar(path) {
   const user = getUser();
   const active = activeNavPath(path, user.role);
@@ -35,9 +43,13 @@ export function renderSidebar(path) {
     }),
   ]));
   mount($("sidebar"),
-    h("a", { class: "brand", href: "#/", "aria-label": "WorkEasy360 LMS home" }, [ProductLogo({ tone: "dark", layout: "stacked", size: "md", decorative: true }), ProductMark(32, "", "brand-compact")]),
+    h("div", { class: "brand" }, [
+      h("a", { class: "brand-link", href: "#/", "aria-label": "WorkEasy360 LMS home" }, [ProductLogo({ tone: "dark", layout: "stacked", size: "md", decorative: true }), ProductMark(32, "", "brand-compact")]),
+      h("button", { class: "sidebar-toggle", type: "button", "aria-label": "Collapse sidebar", title: "Collapse sidebar", "data-nav-collapse": "", onclick: () => setNavCollapsed(true) }, ico("chevron-left", 16)),
+    ]),
     canCreateCourse(user) ? h("div", { class: "nav-cta" }, h("a", { class: "btn btn-primary", href: "#/builder/new", title: "Create Course", "data-guide-target": "nav.create-course" }, [ico("plus", 18), h("span", { class: "cta-label" }, "Create Course")])) : null,
     nav,
+    h("div", { class: "sidebar-expand" }, h("button", { class: "sidebar-toggle", type: "button", "aria-label": "Expand sidebar", title: "Expand sidebar", "data-nav-expand": "", onclick: () => setNavCollapsed(false) }, ico("chevron-right", 16))),
     h("div", { class: "sidebar-foot" }, h("div", { class: "sidebar-user" }, [
       h("span", { class: "brand-avatar", "aria-hidden": "true" }, initials(user.name)),
       h("div", { class: "grow" }, [h("div", { class: "sidebar-user-name truncate" }, user.name), h("div", { class: "sidebar-user-role" }, ROLE_LABEL[user.role])]),
@@ -162,5 +174,6 @@ export function initShell() {
   $("sidebar-scrim").addEventListener("click", () => document.body.classList.remove("nav-open"));
   document.addEventListener("keydown", (e) => e.key === "Escape" && document.body.classList.remove("nav-open"));
   bus.on("data:notifications", () => getUser() && refreshChrome());
+  try { document.body.classList.toggle("nav-collapsed", localStorage.getItem(NAV_COLLAPSED_KEY) === "1"); } catch {}
   initAgent($("app"));
 }

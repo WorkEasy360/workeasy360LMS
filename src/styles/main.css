@@ -23,6 +23,14 @@ img, svg { display: block; max-width: 100%; }
 ul, ol { margin: 0; padding: 0; list-style: none; }
 [hidden] { display: none !important; }
 
+/* thin, trackless scrollbars, as in WorkEasy360 Booking (Firefox gets the standard properties; Chromium ignores the
+   ::-webkit-scrollbar rules on any element that sets them, so they stay Firefox-only) */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D1D9E0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #B0BBC5; }
+@supports (-moz-appearance: none) { * { scrollbar-width: thin; scrollbar-color: #D1D9E0 transparent; } }
+
 :focus { outline: none; }
 :focus-visible { outline: 3px solid var(--c-focus); outline-offset: 2px; border-radius: 6px; }
 
