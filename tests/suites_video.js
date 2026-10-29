@@ -74,9 +74,9 @@ export function register({ suites, log, ok, sleep, q, click, type, waitFor, guid
     const course = load("courses").find((c) => c.id === courseId);
     const b = course.modules[0].lessons[0].blocks.find((x) => x.type === "video");
     ok(b?.video?.sourceType === "native" && !!b.video.storageKey, "video saved with sourceType=native and a storageKey");
-    const online = !!localStorage.getItem("we360.v2.token");
+    const online = !!localStorage.getItem("we360.v3.token");
     if (online) {
-      const resp = await fetch(`http://localhost:8080/api/videos/${b.video.storageKey}/stream`, { headers: { Authorization: "Bearer " + localStorage.getItem("we360.v2.token") } });
+      const resp = await fetch(`http://localhost:8080/api/videos/${b.video.storageKey}/stream`, { headers: { Authorization: "Bearer " + localStorage.getItem("we360.v3.token") } });
       ok(resp.status === 200, "uploaded file is stored on the backend and streams back (HTTP " + resp.status + ")");
     } else {
       ok(!!(await videoStorage.get(b.video.storageKey)), "uploaded file is stored via the local storage abstraction");
@@ -102,7 +102,7 @@ export function register({ suites, log, ok, sleep, q, click, type, waitFor, guid
     ok(!!q(".vp") && /Watch the video to 90%/.test(q(".player-bar").textContent), "learner sees the native player and the 90% completion hint");
     ok(!T("player.complete"), "manual Mark complete is replaced by the watch rule");
     const v = q(".vp video");
-    const online = !!localStorage.getItem("we360.v2.token");
+    const online = !!localStorage.getItem("we360.v3.token");
     const urlOk = (src) => (online ? /\/api\/videos\/.+\/stream/.test(src) : /^blob:/.test(src));
     await waitFor(() => urlOk(v.src), 3000, "playback url");
     ok(urlOk(v.src), `playback URL resolved through the ${online ? "backend" : "local"} storage abstraction: ${v.src.slice(0, 60)}`);
@@ -237,7 +237,7 @@ export function registerBackend({ suites, log, ok, sleep, q, click, type, waitFo
     if (!sessionStorage.getItem(MARK)) {
       localStorage.clear();
       await loginReal(DEMO_EMAIL_BY_ROLE.instructor, DEMO_PASSWORD);
-      ok(!!localStorage.getItem("we360.v2.token"), "real JWT stored after login");
+      ok(!!localStorage.getItem("we360.v3.token"), "real JWT stored after login");
       navigate("/courses");
       await waitFor(() => T("courses.new"), 4000, "courses page");
       click(T("courses.new"));
@@ -254,13 +254,13 @@ export function registerBackend({ suites, log, ok, sleep, q, click, type, waitFo
       await waitFor(() => /Video ready/.test(q(".vd")?.textContent || ""), 20000, "video ready");
       click(T("video.save")); await sleep(400);
       ok(!q(".vd"), "video dialog closed after save");
-      const videoId = JSON.parse(localStorage.getItem("we360.v2.courses")).find((c) => c.id === courseId).modules[0].lessons[0].blocks.find((b) => b.type === "video")?.video?.storageKey;
+      const videoId = JSON.parse(localStorage.getItem("we360.v3.courses")).find((c) => c.id === courseId).modules[0].lessons[0].blocks.find((b) => b.type === "video")?.video?.storageKey;
       ok(!!videoId, "local course object now references a video (storageKey=" + videoId + ")");
       click(T("course.publish")); await sleep(300);
       await flushSyncNow(courseId);
       await sleep(300);
 
-      const token = localStorage.getItem("we360.v2.token");
+      const token = localStorage.getItem("we360.v3.token");
       const apiGet = (path) => fetch("http://localhost:8080/api" + path, { headers: { Authorization: "Bearer " + token } }).then((r) => r.json());
       const server = await apiGet(`/courses/${courseId}`);
       ok(server.title === courseName, "server has the exact course title: " + server.title);
@@ -283,11 +283,11 @@ export function registerBackend({ suites, log, ok, sleep, q, click, type, waitFo
       // ---- phase 2: fresh load, no local cache, no session ----
       const courseName = sessionStorage.getItem("we360_e2e_title");
       sessionStorage.removeItem(MARK);
-      ok(!localStorage.getItem("we360.v2.token") && !localStorage.getItem("we360.v2.courses"), "local cache is genuinely empty after the reload");
+      ok(!localStorage.getItem("we360.v3.token") && !localStorage.getItem("we360.v3.courses"), "local cache is genuinely empty after the reload");
       await waitFor(() => q(".role-card"), 4000, "login screen");
       ok(!!q(".role-card"), "app boots to the sign-in screen when signed out, exactly as before");
       click([...document.querySelectorAll(".role-card")].find((c) => /Instructor/.test(c.textContent)));
-      await waitFor(() => localStorage.getItem("we360.v2.token"), 4000, "logged back in");
+      await waitFor(() => localStorage.getItem("we360.v3.token"), 4000, "logged back in");
       navigate("/courses");
       await waitFor(() => document.querySelector("#main")?.textContent.includes(courseName), 6000, "course reappears");
       ok(document.querySelector("#main").textContent.includes(courseName), "the course is visible again in My Courses after logging back in: " + courseName);
@@ -332,7 +332,7 @@ export function registerLearningBackend({ suites, log, ok, sleep, q, click, type
       if (brief) { type(brief, "Write a short response for this backend-connected assignment test."); await sleep(150); }
     }
     click(T("course.publish")); await sleep(400);
-    const lessonId = JSON.parse(localStorage.getItem("we360.v2.courses")).find((c) => c.id === courseId).modules[0].lessons[0].id;
+    const lessonId = JSON.parse(localStorage.getItem("we360.v3.courses")).find((c) => c.id === courseId).modules[0].lessons[0].id;
     return { courseId, lessonId };
   }
 
@@ -348,7 +348,7 @@ export function registerLearningBackend({ suites, log, ok, sleep, q, click, type
     const answers = Object.fromEntries(quiz.questions.map((qq) => [qq.id, qq.answer]));
     saveQuizResult("u-maya", courseId, lessonId, { score: 100, passed: true, answers });
     await sleep(400);
-    const token = localStorage.getItem("we360.v2.token");
+    const token = localStorage.getItem("we360.v3.token");
     const attempts = await fetch(`http://localhost:8080/api/lessons/${lessonId}/quiz-attempts`, { headers: { Authorization: "Bearer " + token } }).then((r) => r.json());
     ok(attempts.length > 0 && attempts[0].score === 100, "quiz attempt persisted on the backend (" + attempts.length + " attempt(s), last score " + attempts[0]?.score + "%)");
   };
@@ -361,7 +361,7 @@ export function registerLearningBackend({ suites, log, ok, sleep, q, click, type
     type(q('textarea[aria-label="Your submission"]'), "This is my real submitted answer for the backend-connected assignment test, well over twenty characters.");
     click([...document.querySelectorAll("button")].find((b) => /Submit assignment/.test(b.textContent)));
     await sleep(400);
-    const token = localStorage.getItem("we360.v2.token");
+    const token = localStorage.getItem("we360.v3.token");
     const mine = await fetch(`http://localhost:8080/api/lessons/${lessonId}/submissions/me`, { headers: { Authorization: "Bearer " + token } }).then((r) => r.json());
     ok(mine && mine.status === "SUBMITTED", "assignment submission persisted on the backend: " + JSON.stringify(mine?.body || "").slice(0, 40));
   };
@@ -374,7 +374,7 @@ export function registerLearningBackend({ suites, log, ok, sleep, q, click, type
     type(title, uniqueTitle);
     [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Post").click();
     await sleep(400);
-    const token = localStorage.getItem("we360.v2.token");
+    const token = localStorage.getItem("we360.v3.token");
     const posts = await fetch("http://localhost:8080/api/community/posts", { headers: { Authorization: "Bearer " + token } }).then((r) => r.json());
     ok(posts.some((p) => p.title === uniqueTitle), "new community post persisted on the backend");
   };
@@ -387,7 +387,7 @@ export function registerLearningBackend({ suites, log, ok, sleep, q, click, type
     type(T("course.name"), "Guide backend test " + Date.now());
     await waitFor(() => guideEngine?.state?.stepIndex >= 1, 3000, "guide step advances"); // the "name" step settles ~1s after typing stops
     await sleep(400);
-    const token = localStorage.getItem("we360.v2.token");
+    const token = localStorage.getItem("we360.v3.token");
     const progress = await fetch("http://localhost:8080/api/guides/progress", { headers: { Authorization: "Bearer " + token } }).then((r) => r.json());
     const g = progress.find((p) => p.guideId === "create-first-course");
     ok(!!g && g.stepIndex >= 1, "guide step progress persisted on the backend (step " + g?.stepIndex + ")");
@@ -402,10 +402,10 @@ const shared = {};
 // ---------------- video resume, certificate verification, fresh-quiz click-through ----------------
 export function registerFinal({ suites, log, ok, sleep, q, click, type, waitFor, navigate }) {
   const T = (t) => q(`[data-guide-target="${t}"]`);
-  const token = () => localStorage.getItem("we360.v2.token");
+  const token = () => localStorage.getItem("we360.v3.token");
   const apiGet = (path) => fetch("http://localhost:8080/api" + path, { headers: { Authorization: "Bearer " + token() } }).then((r) => (r.ok ? r.json() : null));
   const setFile = (input, file) => { const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files; input.dispatchEvent(new Event("change", { bubbles: true })); };
-  const localCourses = () => JSON.parse(localStorage.getItem("we360.v2.courses") || "[]");
+  const localCourses = () => JSON.parse(localStorage.getItem("we360.v3.courses") || "[]");
 
   async function makeVideoFile(seconds) {
     const c = document.createElement("canvas"); c.width = 320; c.height = 180;
@@ -470,7 +470,7 @@ export function registerFinal({ suites, log, ok, sleep, q, click, type, waitFor,
     } else {
       const courseId = sessionStorage.getItem("we360_resume_course"), lessonId = sessionStorage.getItem("we360_resume_lesson");
       sessionStorage.removeItem(MARK);
-      ok(!localStorage.getItem("we360.v2.enrollments"), "no local progress exists after the reload");
+      ok(!localStorage.getItem("we360.v3.enrollments"), "no local progress exists after the reload");
       await waitFor(() => q(".role-card, [data-login-email]"), 10000, "login screen");
       await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
       await waitFor(() => localCourses().some((c) => c.id === courseId), 15000, "catalog hydrated");

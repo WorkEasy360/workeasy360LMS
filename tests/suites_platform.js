@@ -5,7 +5,7 @@ import { bus } from "/src/lib/events.js";
 
 export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitFor, navigate }) {
   const T = (t) => q(`[data-guide-target="${t}"]`);
-  const token = () => localStorage.getItem("we360.v2.token");
+  const token = () => localStorage.getItem("we360.v3.token");
   const apiRaw = (path, opts = {}) => fetch("http://localhost:8080/api" + path, { ...opts, headers: { Authorization: "Bearer " + token(), "Content-Type": "application/json", ...(opts.headers || {}) } });
   const apiGet = (path) => apiRaw(path).then((r) => (r.ok ? r.json() : null));
   const apiPost = (path, body) => apiRaw(path, { method: "POST", body: JSON.stringify(body || {}) });
@@ -72,6 +72,19 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     click(q("[data-reset-submit]"));
     await waitFor(() => getUser()?.id === created.user.id && location.hash === "#/", 8000, "signed in after reset");
     ok(getUser()?.id === created.user.id, "setting a new password on the page signs the person straight in");
+
+    // Signed-in password change: offered to real accounts in the menu, proves the current password, same rules.
+    await waitFor(() => q(".user-btn"), 4000, "topbar");
+    q(".user-btn").click(); await sleep(300);
+    if (!q(".menu")) { q(".user-btn")?.click(); await waitFor(() => q(".menu"), 4000, "account menu"); }
+    ok(/Change password/.test(q(".menu")?.textContent || ""), "a real account can change its password from the account menu");
+    document.body.click(); await sleep(100);
+    ok((await apiPost("/auth/password", { currentPassword: "wrong", newPassword: "Another123" })).status === 400, "a wrong current password is refused");
+    ok((await apiPost("/auth/password", { currentPassword: "UiPass1234", newPassword: "short" })).status === 400, "a weak new password is refused");
+    ok((await apiPost("/auth/password", { currentPassword: "UiPass1234", newPassword: "Changed1234" })).status === 200, "the password changes with the right current password");
+    const oldPw = await fetch("http://localhost:8080/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: "UiPass1234" }) });
+    const newPw = await fetch("http://localhost:8080/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: "Changed1234" }) });
+    ok(oldPw.status === 401 && newPw.status === 200, "only the new password signs in afterwards");
   };
 
   /** A published course owned by the instructor with one text lesson (created through the real Builder + backend sync). */
@@ -347,7 +360,7 @@ export function registerAccountLogin({ suites, ok, sleep, q, click, type, waitFo
     const { loginReal, logout, getUser, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD } = await import("/src/lib/store.js");
     await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
     const email = `signin.${Date.now().toString(36)}@workeasy360.dev`, password = "Sign-in-" + Math.random().toString(36).slice(2, 12);
-    const created = await fetch("http://localhost:8080/api/users", { method: "POST", headers: { Authorization: "Bearer " + localStorage.getItem("we360.v2.token"), "Content-Type": "application/json" }, body: JSON.stringify({ name: "Signin Person", email, role: "learner", password }) });
+    const created = await fetch("http://localhost:8080/api/users", { method: "POST", headers: { Authorization: "Bearer " + localStorage.getItem("we360.v3.token"), "Content-Type": "application/json" }, body: JSON.stringify({ name: "Signin Person", email, role: "learner", password }) });
     ok(created.status === 200, "admin creates an account with a chosen password");
     const body = await created.json();
     ok(body.temporaryPassword == null && !JSON.stringify(body).includes(password), "the chosen password is never echoed back");
@@ -357,11 +370,11 @@ export function registerAccountLogin({ suites, ok, sleep, q, click, type, waitFo
     type(q("[data-login-email]"), email); type(q("[data-login-password]"), "wrong-password");
     click(q("[data-login-submit]"));
     await waitFor(() => q("[data-login-error]") && !q("[data-login-error]").hidden, 5000, "sign-in error");
-    ok(/don't match/.test(q("[data-login-error]")?.textContent || "") && !localStorage.getItem("we360.v2.token"), "wrong password shows an error and no session is created");
+    ok(/don't match/.test(q("[data-login-error]")?.textContent || "") && !localStorage.getItem("we360.v3.token"), "wrong password shows an error and no session is created");
     type(q("[data-login-password]"), password);
     click(q("[data-login-submit]"));
     await waitFor(() => getUser()?.email === email && !location.hash.startsWith("#/login"), 8000, "signed in");
-    ok(getUser()?.id === body.user.id && getUser()?.role === "learner" && !!localStorage.getItem("we360.v2.token"), "the new person is signed in with their own account and role");
+    ok(getUser()?.id === body.user.id && getUser()?.role === "learner" && !!localStorage.getItem("we360.v3.token"), "the new person is signed in with their own account and role");
     await waitFor(() => q("#main") && q("#main").textContent.trim().length > 40, 8000, "home renders");
     ok(!!q("#main") && /Home/.test(document.title + q("#topbar").textContent), "Home renders for the new account");
     await sleep(300);

@@ -6,7 +6,7 @@
 // Deployments on another host set `window.WE360_API_BASE` in index.html before src/app.js loads.
 export const API_BASE = (typeof window !== "undefined" && window.WE360_API_BASE) || "http://localhost:8080/api";
 
-const TOKEN_KEY = "we360.v2.token";
+const TOKEN_KEY = "we360.v3.token";
 
 export const getToken = () => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };
 export const setToken = (t) => { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {} };
@@ -59,6 +59,7 @@ export const api = {
   forgotPassword: (email) => post("/auth/forgot", { email }), // always 200; {sent} only says whether this server e-mails
   resetPassword: (token, password) => post("/auth/reset", { token, password }), // signs in on success
   userResetToken: (id) => post(`/users/${id}/reset-token`), // admin: one-time reset link (also e-mailed when SMTP is on)
+  changePassword: (currentPassword, newPassword) => post("/auth/password", { currentPassword, newPassword }), // signed-in, proves the current password
 
   // users / settings
   users: (role) => get("/users" + (role ? `?role=${role}` : "")),

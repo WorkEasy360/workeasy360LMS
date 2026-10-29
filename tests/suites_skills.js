@@ -6,7 +6,7 @@ import { flushSyncNow } from "/src/services/courseSync.js";
 
 export function registerSkills({ suites, log, ok, sleep, q, click, type, waitFor, navigate }) {
   const T = (t) => q(`[data-guide-target="${t}"]`);
-  const token = () => localStorage.getItem("we360.v2.token");
+  const token = () => localStorage.getItem("we360.v3.token");
   const apiGet = (path) => fetch("http://localhost:8080/api" + path, { headers: { Authorization: "Bearer " + token() } }).then((r) => (r.ok ? r.json() : null));
   const btn = (re, root = document) => [...root.querySelectorAll("button, a.btn")].find((b) => re.test(b.textContent.trim()));
   const chip = (root, skillId) => root.querySelector(`[data-skill-chip="${skillId}"]`);
@@ -219,7 +219,7 @@ export function registerSkills({ suites, log, ok, sleep, q, click, type, waitFor
       ok(snap.every(([id, pct, lvl]) => rows.some((r) => r.skillId === id && r.progressPercentage === pct && r.currentLevel === lvl)), "after a full reload the Skills page shows the same persisted standing");
       for (const [id, pct] of snap) ok(q(`[data-skill-card="${id}"]`)?.textContent.includes(pct + "%"), `card ${id} shows ${pct}% after reload`);
       // logout → login as the same learner: standing comes back from the server, not from local cache
-      localStorage.removeItem("we360.v2.userSkills");
+      localStorage.removeItem("we360.v3.userSkills");
       await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
       await sleep(1200);
       const again = await apiGet("/me/skills");

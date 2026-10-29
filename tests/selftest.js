@@ -68,7 +68,7 @@ const suites = {
     await waitFor(() => guideEngine.state.finished, 3000, "guide finished");
     ok(guideEngine.state.finished, "publishing completes the guide");
     ok(!!q(".guide-complete"), "completion screen shown");
-    ok(JSON.parse(localStorage.getItem("we360.v2.guideProgress"))["u-daniel"].guides["create-first-course"].status === "completed", "progress persisted as completed");
+    ok(JSON.parse(localStorage.getItem("we360.v3.guideProgress"))["u-daniel"].guides["create-first-course"].status === "completed", "progress persisted as completed");
   },
 };
 
@@ -211,7 +211,7 @@ suites.community = async () => {
   // Sign-in hydration re-renders list pages once it lands; wait for that to settle before interacting, as a person would.
   const { bus } = await import("/src/lib/events.js");
   let lastRoute = Date.now(); const off = bus.on("route", () => (lastRoute = Date.now()));
-  await waitFor(() => localStorage.getItem("we360.v2.token"), 8000, "backend session");
+  await waitFor(() => localStorage.getItem("we360.v3.token"), 8000, "backend session");
   await waitFor(() => Date.now() - lastRoute > 2000, 12000, "post-login hydration settled");
   navigate("/community");
   await waitFor(() => Date.now() - lastRoute > 1200, 8000, "community page settled"); off();
@@ -274,7 +274,7 @@ suites.builder = async () => {
   // publish succeeds
   click('[data-guide-target="course.publish"]'); await sleep(200);
   ok(/Published/.test(q('[data-guide-target="course.publish"]').textContent), "publish button reflects published state");
-  const saved = JSON.parse(localStorage.getItem("we360.v2.courses")).find((c) => c.title === "Selftest Course");
+  const saved = JSON.parse(localStorage.getItem("we360.v3.courses")).find((c) => c.title === "Selftest Course");
   ok(saved && saved.status === "published" && saved.modules.length === 2, "course persisted to storage");
   ok(saved.modules[0].lessons.length === 2 && saved.modules[0].lessons[0].blocks.some((b) => b.type === "knowledge"), "lessons and blocks persisted");
   // now visible in the catalog for learners

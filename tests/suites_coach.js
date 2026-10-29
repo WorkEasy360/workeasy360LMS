@@ -6,7 +6,7 @@ import { bus } from "/src/lib/events.js";
 
 export function registerCoach({ suites, log, ok, sleep, q, click, type, waitFor, navigate }) {
   const T = (t) => q(`[data-guide-target="${t}"]`);
-  const token = () => localStorage.getItem("we360.v2.token");
+  const token = () => localStorage.getItem("we360.v3.token");
   const apiRaw = (path, opts = {}) => fetch("http://localhost:8080/api" + path, { ...opts, headers: { Authorization: "Bearer " + token(), "Content-Type": "application/json", ...(opts.headers || {}) } });
   const apiGet = (path) => apiRaw(path).then((r) => (r.ok ? r.json() : null));
   const apiPost = (path, body) => apiRaw(path, { method: "POST", body: JSON.stringify(body || {}) });

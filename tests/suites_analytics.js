@@ -4,7 +4,7 @@ import { loginReal, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, load } from "/src/lib/sto
 
 export function registerAnalytics({ suites, log, ok, sleep, q, click, type, waitFor, navigate }) {
   const T = (t) => q(`[data-guide-target="${t}"]`);
-  const token = () => localStorage.getItem("we360.v2.token");
+  const token = () => localStorage.getItem("we360.v3.token");
   const apiRaw = (path) => fetch("http://localhost:8080/api" + path, { headers: { Authorization: "Bearer " + token() } });
   const apiGet = (path) => apiRaw(path).then((r) => (r.ok ? r.json() : null));
   const metric = (id) => +q(`[data-metric="${id}"]`)?.dataset.metricValue;

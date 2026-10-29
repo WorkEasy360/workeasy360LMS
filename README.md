@@ -49,7 +49,7 @@ index.html ─ src/app.js (routes, session, hydration)          backend/ (Spring
    tests/         in-browser regression suites
 ```
 
-**Data flow.** The frontend keeps a localStorage cache (`we360.v2.*`) so pages render instantly and the app still works
+**Data flow.** The frontend keeps a localStorage cache (`we360.v3.*`) so pages render instantly and the app still works
 as an offline demo. When a JWT is present the backend is authoritative: on login/refresh `hydrateIfAuthor()` pulls the
 user's courses, learning state, skills, community, people, notifications and settings; every mutation is pushed to the
 API (course edits are serialised per course by `courseSync.js`). Learner progress, quiz attempts, submissions,

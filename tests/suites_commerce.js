@@ -6,7 +6,7 @@ import { bus } from "/src/lib/events.js";
 export function registerCommerce({ suites, log, ok, sleep, q, click, type, waitFor, navigate }) {
   const T = (t) => q(`[data-guide-target="${t}"]`);
   const API = "http://localhost:8080/api";
-  const token = () => localStorage.getItem("we360.v2.token");
+  const token = () => localStorage.getItem("we360.v3.token");
   const raw = (path, opts = {}, tok = token()) => fetch(API + path, { ...opts, headers: { ...(tok ? { Authorization: "Bearer " + tok } : {}), "Content-Type": "application/json", ...(opts.headers || {}) } });
   const json = async (r) => ({ status: r.status, body: await r.json().catch(() => null) });
   const post = (path, body, tok) => raw(path, { method: "POST", body: JSON.stringify(body || {}) }, tok);

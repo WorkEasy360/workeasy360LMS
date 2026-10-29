@@ -117,6 +117,23 @@ public class AuthController {
         return new LoginResponse(jwt.issue(u.getId(), u.getRole().name()), UserDto.of(u));
     }
 
+    /** Signed-in password change: proves the current password, applies the same strength rules as registration. */
+    public record ChangePasswordRequest(String currentPassword, String newPassword) {}
+
+    @PostMapping("/password")
+    public void changePassword(@AuthenticationPrincipal CurrentUser principal, @RequestBody ChangePasswordRequest req) {
+        if (principal == null) throw new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Sign in to continue");
+        User u = users.findById(principal.getId()).orElseThrow(() -> ApiException.notFound("User"));
+        if (req == null || req.currentPassword() == null || !encoder.matches(req.currentPassword(), u.getPasswordHash()))
+            throw ApiException.badRequest("Your current password isn't right.");
+        String p = req.newPassword() == null ? "" : req.newPassword();
+        if (p.length() < 8 || p.length() > 128 || !p.matches(".*[A-Za-z].*") || !p.matches(".*\\d.*"))
+            throw ApiException.badRequest("Use a password of at least 8 characters with at least one letter and one number.");
+        u.setPasswordHash(encoder.encode(p));
+        u.setUpdatedAt(java.time.Instant.now());
+        users.save(u);
+    }
+
     @GetMapping("/me")
     public UserDto me(@AuthenticationPrincipal CurrentUser principal) {
         // /api/auth/** is public so login/register work without a token; this one endpoint needs a signed-in user.

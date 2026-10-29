@@ -128,14 +128,20 @@ public class MockAiProvider implements AiProvider {
             int n = 0; for (JsonNode c : courses) if (c.has("dueAt") && !"completed".equals(c.path("status").asText())) { n++; reply.append(n == 1 ? "Due dates on your plate:" : "").append("\n- ").append(c.path("title").asText()).append(" — due ").append(c.path("dueAt").asText().substring(0, 10)).append(", ").append(c.path("pct").asInt()).append("% done"); }
             if (n == 0) reply.append("Nothing is overdue and none of your courses has a due date, ").append(name).append(". "); if (top != null) { reply.append(n == 0 ? "The most useful next step is: " : "\nStart with: ").append(top.path("title").asText()).append(" — ").append(top.path("reason").asText()); addRecAction(actions, top); }
         }
-        else if (question.contains("summar") || question.contains("progress") || question.contains("close to")) {
+        else if (question.contains("summar") || question.contains("progress") || question.contains("close to") || question.contains("how am i") || question.contains("doing")) {
             int inProg = 0, done = 0; for (JsonNode c : courses) { if ("completed".equals(c.path("status").asText())) done++; else if (c.path("done").asInt() > 0) inProg++; }
             reply.append("Here's where you stand, ").append(name).append(": ").append(done).append(" course").append(done == 1 ? "" : "s").append(" completed, ").append(inProg).append(" in progress, streak ").append(ctx.path("learner").path("streakDays").asInt()).append(" day").append(ctx.path("learner").path("streakDays").asInt() == 1 ? "" : "s").append(".");
             JsonNode closest = null; for (JsonNode c : courses) if (!"completed".equals(c.path("status").asText()) && c.path("done").asInt() > 0 && (closest == null || c.path("pct").asInt() > closest.path("pct").asInt())) closest = c;
             if (closest != null) { reply.append(" Closest to finishing: ").append(closest.path("title").asText()).append(" at ").append(closest.path("pct").asInt()).append("% (").append(closest.path("minutesLeft").asInt()).append(" min left)."); ObjectNode a = actions.addObject(); a.put("type", "CONTINUE_LESSON"); a.put("label", "Continue " + closest.path("title").asText()); a.put("courseId", closest.path("courseId").asText()); a.put("lessonId", closest.path("nextLesson").path("lessonId").asText()); }
             JsonNode certs = ctx.path("certificates"); if (certs.isArray() && !certs.isEmpty()) reply.append(" Certificates: ").append(certs.size()).append(".");
         }
-        else { // "what next" and anything else: lead with the top deterministic recommendation
+        else if (!question.matches(".*(learn|course|lesson|skill|quiz|plan|next|recommend|why|due|behind|overdue|progress|summar|close|explain|remember|practice|relate|start|finish|certificat|journey|goal|study|stuck|assignment|enroll?|what should|help).*")) {
+            // Off-topic ("what is 2+2", refunds, trivia): say so honestly instead of pretending the canned
+            // recommendation answers it. The full AI provider handles scope itself; this is the offline stand-in.
+            reply.append("I'm your learning coach, so I can't help with that — I only know your courses, skills and progress here. ");
+            if (top != null) { reply.append("What I can offer: your best next step is “").append(top.path("title").asText()).append("” — ").append(top.path("reason").asText()); addRecAction(actions, top); }
+        }
+        else { // "what next" and anything else learning-shaped: lead with the top deterministic recommendation
             if (top == null) reply.append("You're not enrolled in anything yet, ").append(name).append(" — pick a course from Explore and I'll guide you from there.");
             else { reply.append("Next for you, ").append(name).append(": ").append(top.path("title").asText()).append(". ").append(top.path("reason").asText()); if (recs.size() > 1) reply.append("\nAfter that: ").append(recs.get(1).path("title").asText()).append("."); addRecAction(actions, top); }
         }

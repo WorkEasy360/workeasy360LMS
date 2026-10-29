@@ -6,7 +6,9 @@ import { Breadcrumb } from "../components/Tabs.js";
 import { Dropdown } from "../components/Menu.js";
 import { Button } from "../components/Button.js";
 import { Badge } from "../components/Badge.js";
-import { openDrawer, confirmDialog, toast } from "../components/Overlay.js";
+import { openDrawer, openModal, confirmDialog, toast } from "../components/Overlay.js";
+import { Field, Input } from "../components/Form.js";
+import { api } from "../services/api.js";
 import { EmptyState } from "../components/States.js";
 import { getUser, login, logout, resetAll, DEMO_USER_BY_ROLE, DEMO_ENABLED } from "../lib/store.js";
 import { unreadCount, notificationsFor, markRead, initials } from "../services/people.js";
@@ -23,7 +25,7 @@ import { bus } from "../lib/events.js";
 const $ = (id) => document.getElementById(id);
 
 // Collapsed (icon-only) sidebar on desktop, remembered per browser — as in WorkEasy360 Booking.
-const NAV_COLLAPSED_KEY = "we360.v2.navCollapsed";
+const NAV_COLLAPSED_KEY = "we360.v3.navCollapsed";
 function setNavCollapsed(on) {
   document.body.classList.toggle("nav-collapsed", on);
   try { localStorage.setItem(NAV_COLLAPSED_KEY, on ? "1" : "0"); } catch {}
@@ -88,7 +90,11 @@ export function renderTopbar(pageMeta = {}, path = "/") {
         ...Object.keys(ROLE_LABEL).map((r) => ({ label: ROLE_LABEL[r], icon: r === user.role ? "check" : "user", onClick: () => { if (r !== user.role) { login(DEMO_USER_BY_ROLE[r]); navigate("/", { replace: true }); } } })),
         "sep",
         { label: "Reset demo data", icon: "refresh", onClick: async () => { if (await confirmDialog({ title: "Reset demo data?", message: "This restores all courses, progress, posts and guides to their original state.", confirmLabel: "Reset", danger: true })) { resetAll(); logout(); location.hash = "#/login"; location.reload(); } } },
-      ] : []),
+      ] : [
+        // Real accounts manage their own password here; demo accounts share a published one, so they don't.
+        { label: "Change password", icon: "shield", onClick: () => changePasswordDialog() },
+        "sep",
+      ]),
       { label: "Sign out", icon: "logout", onClick: () => { guideEngine.close(); logout(); navigate("/login"); } },
     ],
     renderTrigger: ({ onClick }) => h("button", { class: "user-btn", type: "button", onclick: onClick, "aria-label": `Account menu for ${user.name}` }, [
@@ -139,6 +145,26 @@ function SearchBox(user) {
   document.addEventListener("mousedown", (e) => { if (!wrap.contains(e.target)) close(); });
   document.addEventListener("keydown", (e) => { if (e.key === "/" && !/input|textarea|select/i.test(document.activeElement?.tagName) && !document.activeElement?.isContentEditable) { e.preventDefault(); input.focus(); } });
   return wrap;
+}
+
+function changePasswordDialog() {
+  const current = Input({ type: "password", autocomplete: "current-password", placeholder: "Current password", "data-pw-current": "" });
+  const next = Input({ type: "password", autocomplete: "new-password", placeholder: "At least 8 characters, letters and numbers", "data-pw-new": "" });
+  const confirm = Input({ type: "password", autocomplete: "new-password", placeholder: "Repeat the new password", "data-pw-confirm": "" });
+  const err = h("div", { class: "hint", role: "alert", style: "color:var(--c-danger)", hidden: true, "data-pw-error": "" });
+  openModal({
+    title: "Change password", size: "sm",
+    content: h("div", { class: "stack" }, [Field({ label: "Current password", control: current }), Field({ label: "New password", hint: "At least 8 characters with a letter and a number.", control: next }), Field({ label: "Confirm new password", control: confirm }), err]),
+    footer: (close) => [Button({ label: "Cancel", onClick: close }), Button({ label: "Change password", variant: "primary", attrs: { "data-pw-submit": "" }, onClick: async (e) => {
+      const fail = (m) => { err.textContent = m; err.hidden = false; };
+      err.hidden = true;
+      if (next.value.length < 8 || !/[A-Za-z]/.test(next.value) || !/\d/.test(next.value)) return fail("Use a password of at least 8 characters with at least one letter and one number.");
+      if (next.value !== confirm.value) return fail("The two passwords don't match.");
+      const btn = e.currentTarget; btn.disabled = true;
+      try { await api.changePassword(current.value, next.value); close(); toast("Password changed"); }
+      catch (ex) { fail(ex.message || "Could not change the password."); btn.disabled = false; }
+    } })],
+  });
 }
 
 function openNotifications() {

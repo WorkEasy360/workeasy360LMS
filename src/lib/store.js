@@ -4,7 +4,7 @@ import { bus } from "./events.js";
 import { makeSeed } from "./mockData.js";
 import { api, setToken, getToken, setUnauthorizedHandler } from "../services/api.js";
 
-const PREFIX = "we360.v2.";
+const PREFIX = "we360.v3.";
 const cache = {};
 let seedCache;
 

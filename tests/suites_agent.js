@@ -6,7 +6,7 @@ import { guideEngine } from "/src/guide/GuideEngine.js";
 
 export function registerAgent({ suites, log, ok, sleep, q, click, type, waitFor, navigate }) {
   const T = (t) => q(`[data-guide-target="${t}"]`);
-  const token = () => localStorage.getItem("we360.v2.token");
+  const token = () => localStorage.getItem("we360.v3.token");
   const apiGet = (path) => fetch("http://localhost:8080/api" + path, { headers: { Authorization: "Bearer " + token() } }).then((r) => (r.ok ? r.json() : null));
   let lastRoute = 0; bus.on("route", () => (lastRoute = Date.now()));
   const settled = async (userId) => {
@@ -148,9 +148,9 @@ export function registerAgent({ suites, log, ok, sleep, q, click, type, waitFor,
     ok(!shown(q("#sidebar .product-logo")) && shown(q("#sidebar .brand-compact")) && ![...document.querySelectorAll("#sidebar .nav-text")].some(shown), "collapsed: W mark only, no labels");
     ok([...document.querySelectorAll("#sidebar .nav-item")].every((a) => shown(a) && a.title), "collapsed: every menu item stays visible with a tooltip");
     ok(shown(q("[data-nav-expand]")) && document.activeElement === q("[data-nav-expand]"), "Expand appears at the bottom and receives focus");
-    ok(localStorage.getItem("we360.v2.navCollapsed") === "1", "the collapsed state is remembered");
+    ok(localStorage.getItem("we360.v3.navCollapsed") === "1", "the collapsed state is remembered");
     click(q("[data-nav-expand]")); await sleep(100);
-    ok(!document.body.classList.contains("nav-collapsed") && sideW() === 248 && shown(q("#sidebar .product-logo")) && localStorage.getItem("we360.v2.navCollapsed") === "0" && document.activeElement === q("[data-nav-collapse]"), "Expand restores the full sidebar and focus");
+    ok(!document.body.classList.contains("nav-collapsed") && sideW() === 248 && shown(q("#sidebar .product-logo")) && localStorage.getItem("we360.v3.navCollapsed") === "0" && document.activeElement === q("[data-nav-collapse]"), "Expand restores the full sidebar and focus");
     const rules = [...document.styleSheets].flatMap((s) => { try { return [...s.cssRules]; } catch { return []; } });
     const thumb = rules.find((r) => r.selectorText === "::-webkit-scrollbar-thumb");
     ok(rules.some((r) => r.selectorText === "::-webkit-scrollbar" && r.style.width === "6px") && thumb?.style.borderRadius === "3px" && rules.some((r) => /::-webkit-scrollbar-track/.test(r.selectorText || "") && r.style.background.includes("transparent")), "thin rounded scrollbars with a transparent track");
