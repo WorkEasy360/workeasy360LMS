@@ -2,7 +2,7 @@
 // the product name, the "W" mark on its own, and the AI agent's artwork.
 import { h } from "../lib/dom.js";
 
-export const PRODUCT_NAME = "WorkEasy360 LMS";
+export const PRODUCT_NAME = "WorkEasyLMS";
 const PRODUCT_SUFFIX = "LMS";
 const ASSETS = "/src/assets/brand/";
 export const AGENT_LOGO = ASSETS + "agent-logo.png";
@@ -15,7 +15,7 @@ const STACKED = { sm: { logo: 22, text: 12 }, md: { logo: 26, text: 13 }, lg: { 
 /** In the stacked layout the product name starts under the "W" of the wordmark (18.9% of the logo width). */
 const WORDMARK_START = 0.189;
 
-/** Logo + "LMS". `tone` is the background it sits on: "dark" uses the white wordmark. One accessible name: "WorkEasy360 LMS". */
+/** Logo + "LMS". `tone` is the background it sits on: "dark" uses the white wordmark. One accessible name: "WorkEasyLMS". */
 export function ProductLogo({ tone = "light", layout = "inline", size = "md", decorative = false } = {}) {
   const stacked = layout === "stacked";
   const logoH = stacked ? STACKED[size].logo : INLINE[size].logo, logoW = Math.round(logoH * LOGO_ASPECT);

@@ -112,11 +112,11 @@ function dispatch(match) {
   if (r?.opts.auth) {
     if (user) return navigate("/", { replace: true });
     showAuth();
-    if (r.opts.signup) { SignupPage($("auth-root")); document.title = "Create account · WorkEasy360"; return; }
-    if (r.opts.forgot) { ForgotPage($("auth-root")); document.title = "Reset password · WorkEasy360"; return; }
-    if (r.opts.reset) { ResetPage($("auth-root"), match.params.token); document.title = "Choose a new password · WorkEasy360"; return; }
+    if (r.opts.signup) { SignupPage($("auth-root")); document.title = "Create account · WorkEasyLMS"; return; }
+    if (r.opts.forgot) { ForgotPage($("auth-root")); document.title = "Reset password · WorkEasyLMS"; return; }
+    if (r.opts.reset) { ResetPage($("auth-root"), match.params.token); document.title = "Choose a new password · WorkEasyLMS"; return; }
     LoginPage($("auth-root"));
-    document.title = "Sign in · WorkEasy360";
+    document.title = "Sign in · WorkEasyLMS";
     return;
   }
   if (!user && !r?.opts.public) return navigate("/login", { replace: true });
@@ -126,7 +126,7 @@ function dispatch(match) {
     currentPage = page;
     showAuth();
     mount($("auth-root"), h("div", { class: "login" }, h("div", { class: "login-inner" }, [h("a", { href: "#/login", class: "small", style: "display:block;text-align:center;margin-bottom:16px" }, "← Back to sign in"), page.el])));
-    document.title = `${page.title} · WorkEasy360`;
+    document.title = `${page.title} · WorkEasyLMS`;
     return;
   }
 

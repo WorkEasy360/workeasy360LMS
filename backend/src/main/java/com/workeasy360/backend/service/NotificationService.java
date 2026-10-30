@@ -52,12 +52,12 @@ public class NotificationService {
         // Mirror genuinely new notifications (the dedupe above already returned repeats) to e-mail when SMTP is
         // configured. Governed by the same admin automation rules that created the notification in the first place.
         if (mail.enabled()) {
-            String orgName = settingsRepo.findById("singleton").map(Settings::getOrgName).orElse("WorkEasy360 LMS");
+            String orgName = settingsRepo.findById("singleton").map(Settings::getOrgName).orElse("WorkEasyLMS");
             String base = mail.publicUrl();
             users.findById(userId).ifPresent(u -> mail.send(u.getEmail(), saved.getTitle(),
                     "Hi " + u.getName() + ",\n\n" + (saved.getBody() == null || saved.getBody().isBlank() ? saved.getTitle() : saved.getBody())
                     + (href == null || href.isBlank() || base.isBlank() ? "" : "\n\nOpen it here: " + base + "/#" + href)
-                    + "\n\n— " + orgName + " · WorkEasy360 LMS"));
+                    + "\n\n— " + orgName + " · WorkEasyLMS"));
         }
         return saved;
     }

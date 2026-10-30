@@ -99,7 +99,7 @@ public class AuthController {
             String token = passwordResets.issue(u.getId(), null);
             String base = mail.publicUrl();
             String link = (base.isBlank() ? "" : base + "/") + "#/reset/" + token;
-            mail.send(u.getEmail(), "Reset your WorkEasy360 LMS password",
+            mail.send(u.getEmail(), "Reset your WorkEasyLMS password",
                     "Hi " + u.getName() + ",\n\nSomeone (hopefully you) asked to reset your password.\n\n"
                     + "Set a new one here (the link works for " + com.workeasy360.backend.service.PasswordResetService.EXPIRY_MINUTES + " minutes):\n" + link
                     + "\n\nIf you didn't ask for this, you can ignore this e-mail — your password stays as it is.");

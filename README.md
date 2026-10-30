@@ -1,4 +1,4 @@
-# WorkEasy360 LMS
+# WorkEasyLMS
 
 A complete learning-management product: course authoring (with AI drafting), learning player with native video,
 quizzes and assignments, certificates, skills engine with visual learning journeys, community, analytics, a grounded

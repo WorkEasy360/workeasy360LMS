@@ -97,7 +97,7 @@ public class UserController {
         boolean emailed = mail.enabled();
         if (emailed) {
             String base = mail.publicUrl();
-            mail.send(u.getEmail(), "Reset your WorkEasy360 LMS password",
+            mail.send(u.getEmail(), "Reset your WorkEasyLMS password",
                     "Hi " + u.getName() + ",\n\nYour administrator issued a password reset for your account.\n\n"
                     + "Set a new password here (the link works for " + com.workeasy360.backend.service.PasswordResetService.EXPIRY_MINUTES + " minutes):\n"
                     + (base.isBlank() ? "" : base + "/") + path

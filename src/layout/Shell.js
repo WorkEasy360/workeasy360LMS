@@ -46,7 +46,7 @@ export function renderSidebar(path) {
   ]));
   mount($("sidebar"),
     h("div", { class: "brand" }, [
-      h("a", { class: "brand-link", href: "#/", "aria-label": "WorkEasy360 LMS home" }, [ProductLogo({ tone: "dark", layout: "stacked", size: "md", decorative: true }), ProductMark(32, "", "brand-compact")]),
+      h("a", { class: "brand-link", href: "#/", "aria-label": "WorkEasyLMS home" }, [ProductLogo({ tone: "dark", layout: "stacked", size: "md", decorative: true }), ProductMark(32, "", "brand-compact")]),
       h("button", { class: "sidebar-toggle", type: "button", "aria-label": "Collapse sidebar", title: "Collapse sidebar", "data-nav-collapse": "", onclick: () => setNavCollapsed(true) }, ico("chevron-left", 16)),
     ]),
     canCreateCourse(user) ? h("div", { class: "nav-cta" }, h("a", { class: "btn btn-primary", href: "#/builder/new", title: "Create Course", "data-guide-target": "nav.create-course" }, [ico("plus", 18), h("span", { class: "cta-label" }, "Create Course")])) : null,
