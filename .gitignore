@@ -69,3 +69,4 @@ scratchpad/
 .DS_Store
 Thumbs.db
 desktop.ini
+tests/full-run-output.txt
