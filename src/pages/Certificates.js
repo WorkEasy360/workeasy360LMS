@@ -58,13 +58,18 @@ export function CertificateView(cert) {
   const title = cert.courseTitle || courseTitle(course || { title: "Course" });
   const instructor = cert.instructorName || (course?.instructorId && userById(course.instructorId)?.name) || null;
   const issuer = cert.issuer || settings()?.orgName || null;
+  const issuerLogo = cert.issuerLogo || settings()?.orgLogo || null;
   const verifyHash = `#/verify/${encodeURIComponent(cert.id)}`;
   const inactive = status === "expired" || status === "revoked";
   const meta = [`Awarded on ${longDate(cert.issuedAt)}${issuer ? ` by ${issuer}` : ""}`, cert.expiresAt && `${status === "expired" ? "Expired" : "Valid until"} ${longDate(cert.expiresAt)}`].filter(Boolean).join("  ·  ");
   return h("div", { class: "cert-scroll" }, h("article", { class: ["cert", inactive && "is-expired"], "aria-label": `Certificate of completion awarded to ${name} for ${title}`, "data-cert": cert.id }, h("div", { class: "cert-frame" }, [
     ...["tl", "tr", "bl", "br"].map((p) => h("span", { class: `cert-corner cert-corner-${p}`, "aria-hidden": "true" })),
     h("img", { class: "cert-watermark", src: BRAND_IMAGES.mark, alt: "" }),
-    h("img", { class: "cert-logo", src: BRAND_IMAGES.logo, alt: "WorkEasy360" }),
+    // The top of the certificate belongs to the ISSUING organisation — the customer running this LMS: their
+    // uploaded logo (Admin → Settings) or, without one, their name. Our own brand appears in the credit below.
+    issuerLogo
+      ? h("img", { class: "cert-org-logo", src: issuerLogo, alt: issuer || "Issuing organisation", "data-cert-issuer-logo": "" })
+      : h("div", { class: "cert-org-name", "data-cert-issuer-name": "" }, issuer || "WorkEasyLMS"),
     h("div", { class: "cert-title" }, "Certificate"),
     h("div", { class: "cert-subtitle" }, "of Completion"),
     h("div", { class: "cert-presented" }, "This is to certify that"),
@@ -80,6 +85,8 @@ export function CertificateView(cert) {
       h("div", { class: "cert-seal", html: sealSvg() }),
       h("div", { class: "cert-sign" }, [h("div", { class: "cert-signature" }, instructor || issuer || "WorkEasy360"), h("div", { class: "cert-sign-line" }), h("div", { class: "cert-label" }, instructor ? "Course Instructor" : "Authorised Signatory")]),
     ]),
+    // Our advertisement on every certificate a customer hands out.
+    h("div", { class: "cert-credit", "data-cert-credit": "" }, [h("img", { src: BRAND_IMAGES.mark, alt: "" }), h("span", {}, ["Powered by ", h("strong", {}, ["WorkEasy", h("b", {}, "LMS")]), " · workeasy360.com"])]),
     inactive && h("div", { class: "cert-stamp", "data-cert-stamp": status }, status === "revoked" ? "Revoked" : "Expired"),
   ])));
 }

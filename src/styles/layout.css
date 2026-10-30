@@ -41,14 +41,12 @@ body.guide-open .frame { grid-template-columns: minmax(0, 1fr) var(--guide-w); }
 .sidebar .brand-avatar { background: rgba(var(--c-primary-rgb), 0.3); color: var(--c-primary); }
 .sidebar-scrim { display: none; }
 
-/* brand: logo lockup, mark, the signed-in user's initials */
-.product-logo { display: inline-flex; align-items: flex-start; flex: none; user-select: none; }
-.product-logo.is-stacked { flex-direction: column; }
+/* brand: the WorkEasyLMS lockup (W mark + WorkEasy + green LMS), the mark alone, the signed-in user's initials */
+.product-logo { display: inline-flex; align-items: center; gap: calc(var(--logo-mark, 28px) * 0.3); flex: none; user-select: none; }
 .product-logo img { display: block; max-width: none; }
-.product-logo-name { display: block; white-space: nowrap; line-height: 1; font-weight: 600; color: var(--c-navy); }
-.product-logo.tone-dark .product-logo-name { color: #fff; }
-.product-logo.is-stacked .product-logo-name { letter-spacing: 0.025em; }
-.product-logo.is-stacked.tone-dark .product-logo-name { color: var(--c-primary); }
+.product-logo-word { white-space: nowrap; line-height: 1; font-weight: 800; letter-spacing: -0.02em; font-size: calc(var(--logo-mark, 28px) * 0.68); color: var(--c-navy); }
+.product-logo-word b { color: var(--c-primary); font-weight: 800; }
+.product-logo.tone-dark .product-logo-word { color: #fff; }
 .product-mark { display: block; flex: none; user-select: none; }
 .brand-avatar { width: 36px; height: 36px; border-radius: 50%; display: inline-grid; place-items: center; flex: none; font-size: 13px; font-weight: 700; background: rgba(var(--c-primary-rgb), 0.2); color: var(--c-primary-ink); }
 

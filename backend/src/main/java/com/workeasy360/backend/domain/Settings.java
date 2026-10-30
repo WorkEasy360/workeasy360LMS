@@ -16,4 +16,5 @@ public class Settings {
     @Column(name = "max_video_mb", nullable = false) private Integer maxVideoMb;
     @Column(name = "instructor_publish", nullable = false) private Boolean instructorPublish;
     @Column(name = "automation_json") private String automationJson; // {enrolmentNotifications, dueReminders, certificateExpiry, reviewNotifications, discussionReplies}
+    @Column(name = "org_logo") private String orgLogo; // small data: image printed on certificates as the issuer's logo; null = name only
 }

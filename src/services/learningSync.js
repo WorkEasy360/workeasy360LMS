@@ -80,7 +80,7 @@ export async function hydrateMyLearning() {
       id: c.certificateNumber, userId: c.userId, courseId: c.courseId,
       issuedAt: ms(c.issuedAt), expiresAt: c.expiresAt ? ms(c.expiresAt) : null,
       revoked: c.status === "REVOKED",
-      recipientName: c.recipientName, courseTitle: c.courseTitle, instructorName: c.instructorName, issuer: c.issuer,
+      recipientName: c.recipientName, courseTitle: c.courseTitle, instructorName: c.instructorName, issuer: c.issuer, issuerLogo: c.issuerLogo,
     }));
     replace("certificates", [...byCertKey.values()]);
   } catch (err) {

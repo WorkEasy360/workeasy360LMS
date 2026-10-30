@@ -140,16 +140,38 @@ export function IntegrationsPage() {
   return { title: "Integrations", crumbs: [{ label: "Integrations" }], el: h("div", { class: "stack-lg" }, [PageHeader({ title: "Integrations", sub: "What this deployment is connected to." }), body]) };
 }
 
+/** A small PNG data-URI of an uploaded image, downscaled so it stays well under the server's logo size cap. */
+async function imageToDataUri(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 160 / bmp.height, 640 / bmp.width);
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(bmp.width * scale)); c.height = Math.max(1, Math.round(bmp.height * scale));
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL("image/png");
+}
+
 export function SettingsPage() {
   const s = settings();
   const name = Input({ value: s.orgName }), email = Input({ type: "email", value: s.supportEmail });
   const expiry = Select({ options: ["0", "6", "12", "24"].map((v) => ({ value: v, label: v === "0" ? "Never expires" : `${v} months` })), value: String(s.certExpiryDefault) });
   const maxMB = Input({ type: "number", min: "10", max: "5000", value: s.maxVideoMB || 200 });
   const saved = h("span", { class: "save-indicator saved", hidden: true }, "Saved");
+  // Organisation logo for certificates: undefined = unchanged, "" = remove, data URI = new image.
+  let pendingLogo;
+  const logoPreview = h("img", { alt: "Organisation logo", "data-settings-logo-preview": "", style: `height:44px;max-width:220px;object-fit:contain;${s.orgLogo ? "" : "display:none"}`, src: s.orgLogo || "" });
+  const removeLogoBtn = Button({ label: "Remove", size: "sm", variant: "ghost", onClick: () => { pendingLogo = ""; logoPreview.style.display = "none"; removeLogoBtn.hidden = true; } });
+  removeLogoBtn.hidden = !s.orgLogo;
+  const logoInput = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", hidden: true, "data-settings-logo-input": "", onchange: async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    try { pendingLogo = await imageToDataUri(f); logoPreview.src = pendingLogo; logoPreview.style.display = "block"; removeLogoBtn.hidden = false; }
+    catch { toast("Couldn't read that image.", { type: "error" }); }
+    e.target.value = "";
+  } });
   const el = h("div", { class: "stack-lg", style: "max-width:760px" }, [
     PageHeader({ title: "Settings", sub: "Organisation preferences and platform behaviour." }),
-    Card(h("form", { class: "stack", onsubmit: (e) => { e.preventDefault(); updateSettings({ orgName: name.value.trim() || s.orgName, supportEmail: email.value.trim(), certExpiryDefault: +expiry.value, maxVideoMB: Math.max(10, +maxMB.value || 200) }); saved.hidden = false; toast("Settings saved"); } }, [
+    Card(h("form", { class: "stack", onsubmit: (e) => { e.preventDefault(); updateSettings({ orgName: name.value.trim() || s.orgName, supportEmail: email.value.trim(), certExpiryDefault: +expiry.value, maxVideoMB: Math.max(10, +maxMB.value || 200), ...(pendingLogo !== undefined && { orgLogo: pendingLogo }) }); pendingLogo = undefined; saved.hidden = false; toast("Settings saved"); } }, [
       h("h3", {}, "Organisation"), Field({ label: "Organisation name", control: name }), Field({ label: "Support email", control: email }),
+      Field({ label: "Organisation logo", hint: "Printed at the top of every certificate your organisation issues. PNG or JPEG; it is stored small.", control: h("div", { class: "row wrap" }, [logoPreview, Button({ label: "Upload logo", icon: "upload", size: "sm", attrs: { "data-settings-logo": "" }, onClick: () => logoInput.click() }), removeLogoBtn, logoInput]) }),
       Field({ label: "Default certificate validity", hint: "Used for new courses.", control: expiry }),
       Field({ label: "Maximum video upload size (MB)", hint: "Applies to Upload Video in the Course Builder.", control: maxMB }),
       h("div", { class: "row" }, [Button({ label: "Save changes", variant: "primary", attrs: { type: "submit" } }), saved]),

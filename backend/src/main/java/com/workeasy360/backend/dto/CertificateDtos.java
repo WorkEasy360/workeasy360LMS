@@ -8,10 +8,10 @@ public class CertificateDtos {
     /** A certificate as printed and publicly verified: names are included so it reads correctly on any device. */
     public record CertificateDto(String id, String certificateNumber, String userId, String courseId,
                                   Instant issuedAt, Instant expiresAt, String status,
-                                  String recipientName, String courseTitle, String instructorName, String issuer) {
-        public static CertificateDto of(Certificate c, String status, String recipientName, String courseTitle, String instructorName, String issuer) {
+                                  String recipientName, String courseTitle, String instructorName, String issuer, String issuerLogo) {
+        public static CertificateDto of(Certificate c, String status, String recipientName, String courseTitle, String instructorName, String issuer, String issuerLogo) {
             return new CertificateDto(c.getId(), c.getCertificateNumber(), c.getUserId(), c.getCourseId(), c.getIssuedAt(), c.getExpiresAt(), status,
-                    recipientName, courseTitle, instructorName, issuer);
+                    recipientName, courseTitle, instructorName, issuer, issuerLogo);
         }
     }
 }

@@ -181,11 +181,13 @@ The UI uses the WorkEasy360 palette shared with WorkEasy360 Booking, defined onc
 borders `#E1E7EB`, text `#17232D` / `#667581`. The official logo, the "W" mark (also the favicon) and the agent artwork
 are in `src/assets/brand/` (right-sized copies of the company artwork) and are rendered by `src/components/Brand.js`.
 
-**Certificates** (`CertificateView` in `src/pages/Certificates.js`) are A4 landscape: navy and gold frame, the official
-logo, "Certificate of Completion" (Cinzel), the recipient in script (Great Vibes), the course, the issuing organisation
-(Admin → Settings → organisation name), the course instructor's signature, a gold seal with the W mark, and a QR code that
+**Certificates** (`CertificateView` in `src/pages/Certificates.js`) are A4 landscape: navy and gold frame, the issuing
+organisation’s own logo (uploaded under Admin → Settings → Organisation logo; its name until then), "Certificate of
+Completion" (Cinzel), the recipient in script (Great Vibes), the course, the course instructor's signature, a gold seal
+with the W mark, a "Powered by WorkEasyLMS · workeasy360.com" credit — our advertisement on every certificate a
+customer issues — and a QR code that
 opens the public verification page (`#/verify/<ID>`). `GET /api/certificates` and the public
-`GET /api/certificates/verify/{number}` return `recipientName`, `courseTitle`, `instructorName` and `issuer`, so a
+`GET /api/certificates/verify/{number}` return `recipientName`, `courseTitle`, `instructorName`, `issuer` and `issuerLogo`, so a
 certificate reads correctly on any device; no e-mail address is exposed. "Print / save PDF" prints one A4 landscape page.
 
 ## 7. Notifications and automation

@@ -52,11 +52,13 @@ public class CertificateService {
         list.forEach(c -> userIds.add(c.getUserId()));
         courseById.values().forEach(c -> userIds.add(c.getInstructorId()));
         Map<String, String> names = users.findAllById(userIds).stream().collect(Collectors.toMap(User::getId, User::getName));
-        String issuer = settings.findById("singleton").map(Settings::getOrgName).orElse(null);
+        Settings org = settings.findById("singleton").orElse(null);
+        String issuer = org == null ? null : org.getOrgName();
+        String issuerLogo = org == null ? null : org.getOrgLogo();
         return list.stream().map(c -> {
             Course course = courseById.get(c.getCourseId());
             return CertificateDto.of(c, status(c).name(), names.get(c.getUserId()), course == null ? null : course.getTitle(),
-                    course == null ? null : names.get(course.getInstructorId()), issuer);
+                    course == null ? null : names.get(course.getInstructorId()), issuer, issuerLogo);
         }).toList();
     }
 

@@ -133,9 +133,9 @@ export function registerAgent({ suites, log, ok, sleep, q, click, type, waitFor,
     ok(!!primary && rgb(primary) === "rgb(0,191,98)", `primary buttons are WorkEasy360 green #00BF62 (${primary && rgb(primary)})`);
     const cta = q(".nav-cta .btn");
     ok(!!cta && rgb(cta) === "rgba(0,191,98,0.2)" && rgb(cta, "color") === "rgb(0,191,98)", `sidebar Create Course matches Booking's New Appointment (${cta && rgb(cta)})`);
-    const logo = q("#sidebar [data-brand='product-logo'] img");
-    ok(!!(await imgLoaded(logo)) && /workeasy360-logo-white\.png$/.test(logo.getAttribute("src")) && logo.naturalWidth === 742, "sidebar shows the official white WorkEasy360 logo");
-    ok(/LMS/.test(q("#sidebar .product-logo-name")?.textContent || "") && rgb(q("#sidebar .product-logo-name"), "color") === "rgb(0,191,98)", "product name LMS sits under the logo in green");
+    const lockup = q("#sidebar [data-brand='product-logo']");
+    ok(!!(await imgLoaded(lockup?.querySelector("img"))) && /workeasy360-mark\.png$/.test(lockup.querySelector("img").getAttribute("src")) && lockup.querySelector(".product-logo-word")?.textContent === "WorkEasyLMS", "sidebar lockup reads WorkEasyLMS beside the W mark");
+    ok(rgb(lockup.querySelector(".product-logo-word b"), "color") === "rgb(0,191,98)" && rgb(lockup.querySelector(".product-logo-word"), "color") === "rgb(255,255,255)", "LMS is brand green where the artwork wrote 360; WorkEasy stays white on navy");
     ok(!shown(q("#sidebar .brand-compact")), "the compact mark is hidden while the sidebar is full width");
     ok(/workeasy360-mark\.png$/.test(q("link[rel='icon']")?.getAttribute("href") || "") && q("meta[name='theme-color']")?.content === "#13222E", "favicon is the W mark, theme colour is navy");
     ok(/Priya/.test(q(".sidebar-user-name")?.textContent || "") && q(".sidebar-user-role")?.textContent === "Admin", "sidebar footer shows the signed-in person and role");
@@ -199,8 +199,10 @@ export function registerAgent({ suites, log, ok, sleep, q, click, type, waitFor,
     openCertificate(local);
     const cert = await waitFor(() => q(`.modal [data-cert="${api.certificateNumber}"]`), 3000, "certificate modal");
     ok(!!cert, "View opens the certificate");
-    const logo = cert.querySelector(".cert-logo");
-    ok(!!(await imgLoaded(logo)) && /workeasy360-logo\.png$/.test(logo.getAttribute("src")) && logo.naturalWidth === 742, "certificate shows the official WorkEasy360 logo");
+    // The top belongs to the issuing organisation (logo once uploaded, name otherwise); our brand is the credit line.
+    ok(cert.querySelector("[data-cert-issuer-name]")?.textContent === api.issuer || !!cert.querySelector("[data-cert-issuer-logo]"), "the issuing organisation heads the certificate");
+    const credit = cert.querySelector("[data-cert-credit]");
+    ok(!!credit && /Powered by\s*WorkEasyLMS\s*· workeasy360\.com/.test(credit.textContent.replace(/\s+/g, " ")) && /workeasy360-mark\.png$/.test(credit.querySelector("img").getAttribute("src")), "the Powered by WorkEasyLMS credit advertises us on every certificate");
     ok(/Certificate/i.test(cert.querySelector(".cert-title")?.textContent) && /of Completion/i.test(cert.querySelector(".cert-subtitle")?.textContent), "titled Certificate of Completion");
     ok(cert.querySelector("[data-cert-name]")?.textContent === api.recipientName && cert.querySelector("[data-cert-course]")?.textContent === api.courseTitle, "recipient and course match the backend record");
     ok(cert.querySelector(".cert-signature")?.textContent === (api.instructorName || api.issuer), `signed by the course instructor (${api.instructorName})`);
@@ -218,6 +220,21 @@ export function registerAgent({ suites, log, ok, sleep, q, click, type, waitFor,
     ok(Math.abs(r.width / r.height - 1.414) < 0.01 && r.width >= 620, `A4 landscape proportions (${Math.round(r.width)}×${Math.round(r.height)})`);
     ok(!cert.querySelector("[data-cert-stamp]"), "a valid certificate has no stamp");
     document.querySelector(".modal")?.closest(".scrim")?.remove();
+
+    // An uploaded organisation logo (Admin → Settings) flows onto certificates via the public verification payload.
+    await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
+    const PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const putSettings = (body) => fetch("http://localhost:8080/api/settings", { method: "PUT", headers: { Authorization: "Bearer " + token(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    ok((await putSettings({ orgLogo: PIXEL })).status === 200, "an admin can store the organisation's logo");
+    ok((await putSettings({ orgLogo: "javascript:alert(1)" })).status === 400, "a non-image logo is refused");
+    const pub2 = await fetch(`http://localhost:8080/api/certificates/verify/${encodeURIComponent(api.certificateNumber)}`).then((x) => x.json());
+    ok(pub2.issuerLogo === PIXEL, "public verification carries the issuer's logo");
+    const { CertificateView: CertView } = await import("/src/pages/Certificates.js");
+    const withLogo = CertView({ ...local, issuerLogo: PIXEL });
+    document.body.append(withLogo);
+    ok(!!withLogo.querySelector("[data-cert-issuer-logo]") && !withLogo.querySelector("[data-cert-issuer-name]"), "with a logo set, the organisation's logo replaces its name at the top");
+    withLogo.remove();
+    ok((await putSettings({ orgLogo: "" })).status === 200, "the logo can be removed again");
     // Revoked certificates are stamped (rendered from a copy, so no backend record changes)
     const { CertificateView } = await import("/src/pages/Certificates.js");
     const revoked = CertificateView({ ...local, revoked: true });

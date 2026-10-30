@@ -254,7 +254,7 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     const arch = await json(await apiPost(`/courses/${courseId}/archive`));
     ok(arch.status === 200 && arch.body.status === "ARCHIVED", "archiving keeps the course and its enrolments");
     const st = await json(await apiRaw("/system/status"));
-    ok(st.status === 200 && st.body.database?.connected === true && /PostgreSQL|H2/.test(st.body.database.product) && st.body.database.schemaVersion >= "6", `system status reports the database (${st.body.database?.product} v${st.body.database?.schemaVersion})`);
+    ok(st.status === 200 && st.body.database?.connected === true && /PostgreSQL|H2/.test(st.body.database.product) && +st.body.database.schemaVersion >= 6, `system status reports the database (${st.body.database?.product} v${st.body.database?.schemaVersion})`);
     const s = JSON.stringify(st.body).toLowerCase();
     ok(!s.includes("password") && !s.includes("apikey") && !s.includes("secret") && !s.includes("api_key"), "system status exposes no secrets");
     ok(st.body.ai?.provider === "mock" && st.body.ai?.enabled === false, "system status reports the AI provider (mock, disabled)");

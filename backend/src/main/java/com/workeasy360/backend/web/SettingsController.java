@@ -16,7 +16,7 @@ public class SettingsController {
 
     public record UpdateSettingsRequest(String orgName, String supportEmail, Integer certExpiryDefault,
                                          Boolean guidesEnabled, Boolean communityEnabled, Integer maxVideoMb, Boolean instructorPublish,
-                                         com.fasterxml.jackson.databind.JsonNode automation) {}
+                                         com.fasterxml.jackson.databind.JsonNode automation, String orgLogo) {}
 
     @GetMapping
     public Settings get() { return repo.findById("singleton").orElseThrow(() -> ApiException.notFound("Settings")); }
@@ -32,6 +32,12 @@ public class SettingsController {
         if (req.communityEnabled() != null) s.setCommunityEnabled(req.communityEnabled());
         if (req.maxVideoMb() != null) s.setMaxVideoMb(req.maxVideoMb());
         if (req.instructorPublish() != null) s.setInstructorPublish(req.instructorPublish());
+        if (req.orgLogo() != null) { // the organisation's logo for certificates: a small raster data: image, or "" to remove it
+            String logo = req.orgLogo().trim();
+            if (logo.isEmpty()) s.setOrgLogo(null);
+            else if (logo.length() <= 400_000 && logo.matches("^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$")) s.setOrgLogo(logo);
+            else throw ApiException.badRequest("The logo must be a PNG, JPEG or WebP image up to ~300 KB.");
+        }
         if (req.automation() != null && req.automation().isObject()) { // only known boolean rules are stored
             com.fasterxml.jackson.databind.node.ObjectNode rules = com.workeasy360.backend.util.Json.MAPPER.createObjectNode();
             com.fasterxml.jackson.databind.JsonNode current = s.getAutomationJson() == null ? com.workeasy360.backend.util.Json.MAPPER.createObjectNode() : com.workeasy360.backend.util.Json.read(s.getAutomationJson());

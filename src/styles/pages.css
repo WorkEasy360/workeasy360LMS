@@ -262,7 +262,12 @@ body.guide-open .community { grid-template-columns: minmax(0, 1fr); }
 .cert-corner-bl { bottom: 1.6cqw; left: 1.6cqw; border-right: 0; border-top: 0; } .cert-corner-bl::after { bottom: 0.8cqw; left: 0.8cqw; }
 .cert-corner-br { bottom: 1.6cqw; right: 1.6cqw; border-left: 0; border-top: 0; } .cert-corner-br::after { bottom: 0.8cqw; right: 0.8cqw; }
 .cert-frame > .cert-watermark { position: absolute; z-index: 0; left: 50%; top: 52%; width: 34cqw; height: 34cqw; transform: translate(-50%, -50%); opacity: 0.05; pointer-events: none; }
-.cert-logo { height: 3.6cqw; width: auto; max-width: none; }
+.cert-org-logo { max-height: 6cqw; max-width: 32cqw; width: auto; object-fit: contain; }
+.cert-org-name { font-family: "Cinzel", Georgia, serif; font-weight: 700; font-size: 2.4cqw; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); }
+.cert-credit { margin-top: 1.1cqw; display: flex; align-items: center; gap: 0.6cqw; font-size: 1.05cqw; color: #667581; }
+.cert-credit img { width: 1.7cqw; height: 1.7cqw; }
+.cert-credit strong { font-weight: 800; letter-spacing: -0.01em; color: var(--ink); }
+.cert-credit strong b { color: #008F49; }
 .cert-title { margin-top: 2.2cqw; font-family: "Cinzel", Georgia, serif; font-weight: 700; font-size: 5.4cqw; line-height: 1; letter-spacing: 0.14em; text-indent: 0.14em; color: var(--ink); }
 .cert-subtitle { display: flex; align-items: center; gap: 1.4cqw; margin-top: 0.9cqw; font-family: "Cinzel", Georgia, serif; font-weight: 600; font-size: 1.5cqw; letter-spacing: 0.45em; text-indent: 0.45em; color: #8A6D12; }
 .cert-subtitle::before, .cert-subtitle::after { content: ""; width: 9cqw; height: 0.12cqw; background: linear-gradient(90deg, transparent, var(--gold)); }

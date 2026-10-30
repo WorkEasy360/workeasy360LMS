@@ -111,7 +111,7 @@ export const automationRules = () => { const a = settings().automation || {}; re
 function fromBackendSettings(s) {
   let automation = {};
   try { automation = s.automationJson ? JSON.parse(s.automationJson) : {}; } catch { automation = {}; }
-  return { orgName: s.orgName, supportEmail: s.supportEmail, certExpiryDefault: s.certExpiryDefault, guidesEnabled: s.guidesEnabled, communityEnabled: s.communityEnabled, maxVideoMB: s.maxVideoMb, instructorPublish: s.instructorPublish, automation };
+  return { orgName: s.orgName, supportEmail: s.supportEmail, certExpiryDefault: s.certExpiryDefault, guidesEnabled: s.guidesEnabled, communityEnabled: s.communityEnabled, maxVideoMB: s.maxVideoMb, instructorPublish: s.instructorPublish, orgLogo: s.orgLogo ?? null, automation };
 }
 
 export async function hydrateSettings() {
