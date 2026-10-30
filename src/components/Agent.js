@@ -1,4 +1,4 @@
-// WorkEasy360 Assistant: the floating AI agent on every signed-in page (launcher bottom-right, panel on the right).
+// Work Easy AI Agent: the floating AI agent on every signed-in page (launcher bottom-right, panel on the right).
 // It talks to the Learning Coach backend, so every answer is grounded in the signed-in user's own learning record; on a
 // lesson page it also sends the lesson. Guided tours for the user's role are one click away. Hidden on /coach, which
 // is the full-page version of the same conversation.
@@ -12,7 +12,7 @@ import { guideEngine } from "../guide/GuideEngine.js";
 import { AgentAvatar } from "./Brand.js";
 import { toast } from "./Overlay.js";
 
-const NAME = "WorkEasy360 Assistant";
+const NAME = "Work Easy AI Agent";
 const lessonFromPath = (path) => (path.match(/^\/learn\/[^/?]+\/([^/?]+)/) || [])[1] || null;
 const narrow = () => window.matchMedia("(max-width: 640px)").matches;
 

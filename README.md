@@ -147,7 +147,7 @@ code change needed. When a real provider runs, `Prompts.COACH_SYSTEM` (`learning
 runtime profile (single organization, no callable tools, context-JSON only) and the strict JSON reply contract; it
 adds roughly 6k tokens of input per coach message, priced by your AI provider. The mock provider ignores it.
 
-The **WorkEasy360 Assistant** (`src/components/Agent.js`) is the floating agent on every signed-in page: the robot
+The **Work Easy AI Agent** (`src/components/Agent.js`) is the floating agent on every signed-in page: the robot
 launcher bottom-right opens a side panel with suggested questions, conversation history and guided tours for the
 user's role. It uses the same coach endpoints (`/api/coach/message`, `/api/coach/conversations`), so answers stay
 grounded in the user's own record; in the lesson player it also sends the current lesson. It is hidden on `/coach`,
@@ -273,7 +273,7 @@ learnerguide, player, quiz, community, smoke, quizBackend, assignmentBackend, co
 certVerify, quizFresh, skillProgress, skillQuizEvidence, journey, skillsPersist, analyticsLearner, analyticsFunnel,
 analyticsAssessments, analyticsPersist, aiRbac, responsive (phone-width overflow check), signup, freeCourseAccess, paidCourseLock, purchaseFlow, purchaseFailures, coachContext, recommendations, recommendationFeedback,
 coachConversation, coachLessonContext, coachGrounding, coachRbac, coachValidation, learningPlan, coachPersist, agent
-(WorkEasy360 Assistant), certificate (printable certificate, names, QR code).
+(Work Easy AI Agent), certificate (printable certificate, names, QR code).
 Suites always run with `AI_ENABLED=false` (mock provider) — no external AI calls.
 
 ## 11. Guides

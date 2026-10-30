@@ -146,7 +146,7 @@ body { overflow-x: hidden; }
   :is(body.guide-open, body.nav-collapsed) .nav-cta .cta-label { display: none; }
 }
 
-/* AI agent "WorkEasy360 Assistant": launcher + side panel, as in WorkEasy360 Booking */
+/* AI agent "Work Easy AI Agent": launcher + side panel, as in WorkEasy360 Booking */
 .agent-launcher {
   position: absolute; right: 24px; bottom: 24px; z-index: 50; width: 56px; height: 56px; padding: 0; border: 0; border-radius: 16px; cursor: pointer;
   background: var(--c-navy); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1); transition: transform var(--t-micro) var(--ease);
@@ -162,7 +162,7 @@ body { overflow-x: hidden; }
   background: #fff; border-left: 1px solid #E5E7EB; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: slide-in var(--t-panel) var(--ease-out);
 }
 .agent-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #F3F4F6; flex: none; }
-.agent-head-avatar { border-radius: 8px; }
+.agent-head-avatar { border-radius: 8px; background: var(--c-navy); padding: 2px; }
 .agent-title { font-size: 14px; font-weight: 600; color: #1F2937; line-height: 1.3; }
 .agent-sub { font-size: 12px; color: var(--c-muted); line-height: 1.3; }
 .agent-icon-btn { width: 32px; height: 32px; display: grid; place-items: center; flex: none; border: 0; border-radius: 8px; background: none; color: #6B7280; cursor: pointer; }
@@ -171,7 +171,7 @@ body { overflow-x: hidden; }
 .agent-log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .agent-msg { display: flex; gap: 10px; align-items: flex-start; animation: rise 0.3s var(--ease-out); }
 .agent-msg.is-user { flex-direction: row-reverse; }
-.agent-msg-avatar { border-radius: 50%; margin-top: 2px; }
+.agent-msg-avatar { border-radius: 50%; margin-top: 2px; background: var(--c-navy); padding: 2px; }
 .agent-bubble-wrap { max-width: 88%; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .agent-msg.is-user .agent-bubble-wrap { align-items: flex-end; }
 .agent-bubble { padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
@@ -186,7 +186,7 @@ body { overflow-x: hidden; }
 .agent-chip.is-primary { background: var(--c-primary); border-color: var(--c-primary); color: #fff; }
 .agent-chip.is-primary:hover { background: var(--c-primary-hover); border-color: var(--c-primary-hover); }
 .agent-empty { margin: auto 0; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 16px 8px; }
-.agent-empty-avatar { border-radius: 20px; margin-bottom: 12px; }
+.agent-empty-avatar { border-radius: 20px; margin-bottom: 12px; background: var(--c-navy); padding: 6px; }
 .agent-empty-title { font-size: 14px; font-weight: 600; color: #374151; }
 .agent-empty-sub { font-size: 12px; color: var(--c-muted); margin: 4px 0 20px; max-width: 300px; }
 .agent-suggestions { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 320px; }

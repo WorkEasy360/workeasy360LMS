@@ -428,7 +428,7 @@ body.guide-open .detail-cols { grid-template-columns: minmax(0, 1fr); }
 .coach-bubble { padding: 10px 14px; max-width: 92%; font-size: var(--fs-sm); line-height: 1.5; }
 .coach-text > div + div { margin-top: 4px; }
 .coach-avatar { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; background: var(--c-primary-soft); color: var(--c-primary); flex: none; }
-.agent-avatar.coach-avatar { border-radius: 50%; background: none; }
+.agent-avatar.coach-avatar { border-radius: 50%; background: var(--c-navy); padding: 2px; }
 .coach-compose { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--c-border); align-items: flex-end; }
 .coach-compose .coach-input { flex: 1; resize: none; }
 .coach-typing { display: inline-flex; gap: 4px; } .coach-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--c-muted); animation: coachdot 1s infinite; } .coach-typing i:nth-child(2) { animation-delay: 0.15s; } .coach-typing i:nth-child(3) { animation-delay: 0.3s; }

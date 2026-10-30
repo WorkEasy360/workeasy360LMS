@@ -1,4 +1,4 @@
-// WorkEasy360 Assistant (floating AI agent), WorkEasy360 brand and the printable certificate (run one at a time: index.html?as=<role>&selftest=<suite>).
+// Work Easy AI Agent (floating AI agent), WorkEasy360 brand and the printable certificate (run one at a time: index.html?as=<role>&selftest=<suite>).
 // The agent talks to the Learning Coach backend, which runs on the deterministic mock provider (AI_ENABLED=false).
 import { loginReal, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, load } from "/src/lib/store.js";
 import { bus } from "/src/lib/events.js";
