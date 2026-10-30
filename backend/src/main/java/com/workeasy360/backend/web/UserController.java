@@ -30,10 +30,11 @@ public class UserController {
     private final com.workeasy360.backend.service.PasswordResetService passwordResets;
     private final com.workeasy360.backend.service.MailService mail;
     private final com.workeasy360.backend.service.UserDeleteService deleter;
+    private final com.workeasy360.backend.service.SyncService sync;
     public UserController(UserRepo users, PermissionService perm, PasswordEncoder encoder,
                           com.workeasy360.backend.service.PasswordResetService passwordResets, com.workeasy360.backend.service.MailService mail,
-                          com.workeasy360.backend.service.UserDeleteService deleter) {
-        this.users = users; this.perm = perm; this.encoder = encoder; this.passwordResets = passwordResets; this.mail = mail; this.deleter = deleter;
+                          com.workeasy360.backend.service.UserDeleteService deleter, com.workeasy360.backend.service.SyncService sync) {
+        this.users = users; this.perm = perm; this.encoder = encoder; this.passwordResets = passwordResets; this.mail = mail; this.deleter = deleter; this.sync = sync;
     }
 
     private UserDto view(CurrentUser me, User u) {
@@ -83,7 +84,9 @@ public class UserController {
         if (req.dept() != null) u.setDept(cut(req.dept(), 120, u.getDept()));
         if (req.status() != null && List.of("ACTIVE", "INACTIVE").contains(req.status().toUpperCase())) u.setStatus(req.status().toUpperCase());
         u.setUpdatedAt(Instant.now());
-        return UserDto.of(users.save(u));
+        UserDto d = UserDto.of(users.save(u));
+        if ("INACTIVE".equals(u.getStatus())) sync.disconnectUser(u.getId()); // deactivated: stop live updates immediately
+        return d;
     }
 
     /** Permanently removes a person and their personal data (progress, certificates, posts, coach history). Refused
@@ -92,6 +95,7 @@ public class UserController {
     public Map<String, Object> delete(@AuthenticationPrincipal CurrentUser me, @PathVariable String id) {
         if (!perm.isAdmin(me)) throw ApiException.forbidden("Only an admin can delete people");
         deleter.delete(me.getId(), id);
+        sync.disconnectUser(id);
         return Map.of("ok", true);
     }
 

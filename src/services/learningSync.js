@@ -2,7 +2,7 @@
 // cache on login / refresh — the same additive, last-write-wins pattern as courseSync.js's hydrateMyCourses,
 // so "watch a video, refresh the browser, log back in, still resumes" holds from the real UI.
 import { api } from "./api.js";
-import { isBackendOnline, load, save, replace } from "../lib/store.js";
+import { isBackendOnline, load, save, replace, getUser } from "../lib/store.js";
 import { getCourse, lessonsOf } from "./courses.js";
 
 const ms = (iso) => (iso ? new Date(iso).getTime() : 0);
@@ -58,6 +58,28 @@ export async function hydrateLessonProgress(userId, courseId) {
   const changed = JSON.stringify([e.completed, e.videoProgress]) !== before;
   if (changed) save("enrollments");
   return changed;
+}
+
+/** Staff counterpart: the enrolment rows of every learner in the courses this instructor/admin manages, so the
+ *  Learners and Assessments views show real backend learners and update live. Bounded to the most recently
+ *  updated courses so an organisation with a large catalogue doesn't fan out hundreds of requests; lesson-level
+ *  detail stays with the analytics endpoints, which fetch their own data. */
+export async function hydrateCourseEnrollments() {
+  const me = getUser();
+  if (!me || me.role === "learner" || !isBackendOnline()) return;
+  try {
+    const mine = load("courses")
+      .filter((c) => (me.role === "admin" ? true : c.instructorId === me.id))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, 40);
+    const lists = await Promise.all(mine.map((c) => api.courseLearners(c.id).catch(() => [])));
+    const local = load("enrollments");
+    const byKey = new Map(local.map((e) => [`${e.userId}:${e.courseId}`, e]));
+    lists.flat().forEach((dto) => byKey.set(`${dto.userId}:${dto.courseId}`, toLocalEnrollment(dto, [], getCourse(dto.courseId), byKey.get(`${dto.userId}:${dto.courseId}`))));
+    replace("enrollments", [...byKey.values()]);
+  } catch (err) {
+    console.warn("[learningSync] could not hydrate course enrolments:", err.message);
+  }
 }
 
 export async function hydrateMyLearning() {

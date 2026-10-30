@@ -11,33 +11,41 @@ import { openModal, toast } from "../components/Overlay.js";
 import { listCourses, lessonsOf, courseTitle } from "../services/courses.js";
 import { pendingReviews } from "../services/analytics.js";
 import { load } from "../lib/store.js";
+import { bus } from "../lib/events.js";
+import { hydrateCourseEnrollments } from "../services/learningSync.js";
 import { courseProgress } from "../services/learning.js";
 import { reviewSubmission } from "../services/review.js";
 import { userById } from "../services/people.js";
 
 export function AssessmentsPage(ctx) {
-  const courses = listCourses(ctx.user.role === "admin" ? {} : { instructorId: ctx.user.id });
-  const rows = courses.flatMap((c) => lessonsOf(c).filter((l) => l.type === "quiz" || l.type === "assignment").map((l) => {
-    const es = load("enrollments").filter((e) => e.courseId === c.id);
-    const scores = es.map((e) => e.quiz[l.id]?.score).filter((s) => s != null);
-    const subs = es.map((e) => e.submissions[l.id]).filter(Boolean);
-    return { c, l, attempts: l.type === "quiz" ? scores.length : subs.length, avg: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null, pending: subs.filter((s) => s.status === "submitted").length };
-  }));
-  const el = h("div", { class: "stack-lg" }, [
-    PageHeader({ title: "Assessments", sub: "Every quiz and assignment across your courses.", actions: [Button({ label: "Open Course Builder", icon: "layers", href: "/courses" })] }),
-    rows.length
-      ? h("div", { class: "card table-wrap" }, h("table", { class: "table" }, [
-        h("thead", {}, h("tr", {}, ["Assessment", "Course", "Type", "Content", "Responses", "Result", ""].map((t) => h("th", {}, t)))),
-        h("tbody", {}, rows.map((r) => h("tr", {}, [
-          h("td", { class: "strong" }, r.l.title), h("td", {}, courseTitle(r.c)), h("td", {}, Badge(r.l.type === "quiz" ? "Quiz" : "Assignment", r.l.type === "quiz" ? "info" : "primary")),
-          h("td", { class: "small muted" }, r.l.type === "quiz" ? pluralize(r.l.quiz?.questions.length || 0, "question") : pluralize(r.l.assignment?.rubric.length || 0, "criterion", "criteria")),
-          h("td", {}, String(r.attempts)), h("td", {}, r.l.type === "quiz" ? (r.avg != null ? `${r.avg}% avg` : "—") : r.pending ? Badge(`${r.pending} to review`, "warning") : "—"),
-          h("td", {}, Button({ label: "Edit", size: "sm", icon: "edit", href: `/builder/${r.c.id}` })),
-        ]))),
-      ]))
-      : Card(EmptyState({ icon: "clipboard", title: "No assessments yet", description: "Add a quiz or assignment lesson in the Course Builder.", action: Button({ label: "Go to courses", variant: "primary", href: "/courses" }) })),
-  ]);
-  return { title: "Assessments", crumbs: [{ label: "Assessments" }], el };
+  const host = h("div", { class: "stack-lg" });
+  function draw() {
+    const courses = listCourses(ctx.user.role === "admin" ? {} : { instructorId: ctx.user.id });
+    const rows = courses.flatMap((c) => lessonsOf(c).filter((l) => l.type === "quiz" || l.type === "assignment").map((l) => {
+      const es = load("enrollments").filter((e) => e.courseId === c.id);
+      const scores = es.map((e) => e.quiz[l.id]?.score).filter((s) => s != null);
+      const subs = es.map((e) => e.submissions[l.id]).filter(Boolean);
+      return { c, l, attempts: l.type === "quiz" ? scores.length : subs.length, avg: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null, pending: subs.filter((s) => s.status === "submitted").length };
+    }));
+    host.replaceChildren(
+      PageHeader({ title: "Assessments", sub: "Every quiz and assignment across your courses.", actions: [Button({ label: "Open Course Builder", icon: "layers", href: "/courses" })] }),
+      rows.length
+        ? h("div", { class: "card table-wrap" }, h("table", { class: "table" }, [
+          h("thead", {}, h("tr", {}, ["Assessment", "Course", "Type", "Content", "Responses", "Result", ""].map((t) => h("th", {}, t)))),
+          h("tbody", {}, rows.map((r) => h("tr", {}, [
+            h("td", { class: "strong" }, r.l.title), h("td", {}, courseTitle(r.c)), h("td", {}, Badge(r.l.type === "quiz" ? "Quiz" : "Assignment", r.l.type === "quiz" ? "info" : "primary")),
+            h("td", { class: "small muted" }, r.l.type === "quiz" ? pluralize(r.l.quiz?.questions.length || 0, "question") : pluralize(r.l.assignment?.rubric.length || 0, "criterion", "criteria")),
+            h("td", {}, String(r.attempts)), h("td", {}, r.l.type === "quiz" ? (r.avg != null ? `${r.avg}% avg` : "—") : r.pending ? Badge(`${r.pending} to review`, "warning") : "—"),
+            h("td", {}, Button({ label: "Edit", size: "sm", icon: "edit", href: `/builder/${r.c.id}` })),
+          ]))),
+        ]))
+        : Card(EmptyState({ icon: "clipboard", title: "No assessments yet", description: "Add a quiz or assignment lesson in the Course Builder.", action: Button({ label: "Go to courses", variant: "primary", href: "/courses" }) })),
+    );
+  }
+  draw();
+  hydrateCourseEnrollments().then(() => host.isConnected && draw());
+  ["sync:learning", "data:courses"].forEach((ev) => bus.on(ev, () => host.isConnected && hydrateCourseEnrollments().then(() => host.isConnected && draw())));
+  return { title: "Assessments", crumbs: [{ label: "Assessments" }], el: host };
 }
 
 export function LearnersPage(ctx) {
@@ -86,5 +94,7 @@ export function LearnersPage(ctx) {
     });
   }
   draw();
+  hydrateCourseEnrollments().then(() => host.isConnected && draw());
+  bus.on("sync:learning", () => host.isConnected && hydrateCourseEnrollments().then(() => host.isConnected && draw()));
   return { title: "Learners", crumbs: [{ label: "Learners" }], el: host };
 }

@@ -34,7 +34,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 var claims = jwt.parse(token);
                 String userId = claims.getSubject();
                 Enums.Role role = Enums.Role.valueOf(claims.get("role", String.class));
-                var principal = new CurrentUser(userId, role);
+                String orgId = claims.get("org", String.class); // tokens issued before tenancy carry no org → default org
+                var principal = new CurrentUser(userId, role, orgId);
                 var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
                 SecurityContextHolder.getContext().setAuthentication(auth);
             } catch (JwtException | IllegalArgumentException ignored) {

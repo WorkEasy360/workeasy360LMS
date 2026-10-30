@@ -25,12 +25,12 @@ import java.util.List;
 public class NotificationService {
     private final NotificationRepo notifications; private final SettingsRepo settingsRepo;
     private final EnrollmentRepo enrollments; private final CertificateRepo certificates; private final CourseRepo courses;
-    private final UserRepo users; private final MailService mail;
+    private final UserRepo users; private final MailService mail; private final SyncService sync;
 
     public NotificationService(NotificationRepo notifications, SettingsRepo settingsRepo, EnrollmentRepo enrollments, CertificateRepo certificates, CourseRepo courses,
-                               UserRepo users, MailService mail) {
+                               UserRepo users, MailService mail, SyncService sync) {
         this.notifications = notifications; this.settingsRepo = settingsRepo; this.enrollments = enrollments; this.certificates = certificates; this.courses = courses;
-        this.users = users; this.mail = mail;
+        this.users = users; this.mail = mail; this.sync = sync;
     }
 
     public boolean ruleEnabled(String rule) {
@@ -49,6 +49,8 @@ public class NotificationService {
             if (n.getKind().equals(kind) && java.util.Objects.equals(n.getHref(), href) && java.util.Objects.equals(n.getTitle(), t)) return n;
         }
         Notification saved = notifications.save(Notification.builder().userId(userId).kind(kind).title(cut(title, 300)).body(cut(body, 1000)).href(cut(href, 300)).read(false).at(Instant.now()).build());
+        // Push the bell update to the recipient's open sessions (delivered only after this transaction commits).
+        sync.publish(com.workeasy360.backend.security.CurrentUser.DEFAULT_ORG, "notifications", SyncService.Audience.USER, null, userId);
         // Mirror genuinely new notifications (the dedupe above already returned repeats) to e-mail when SMTP is
         // configured. Governed by the same admin automation rules that created the notification in the first place.
         if (mail.enabled()) {

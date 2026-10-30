@@ -1,5 +1,6 @@
 // Community: feed, groups, discussions, questions for experts, search, pinned posts. Connected to courses and lessons.
 import { h, pluralize } from "../lib/dom.js";
+import { bus } from "../lib/events.js";
 import { icon as ico } from "../lib/icons.js";
 import { Button } from "../components/Button.js";
 import { Tabs } from "../components/Tabs.js";
@@ -60,5 +61,12 @@ export function CommunityPage(ctx) {
   ]);
   drawSide();
   const stop = withLoading(feed, () => { drawFeed(); return [...feed.childNodes]; }, { delay: 180, skeleton: () => h("div", { class: "stack" }, [1, 2].map(() => h("div", { class: "skeleton", style: "height:150px" }))) });
+  // Live updates from other users — skipped while this person is typing so an open draft is never discarded.
+  ["data:posts", "data:groups"].forEach((ev) => bus.on(ev, () => {
+    if (!feed.isConnected) return;
+    const a = document.activeElement;
+    if (a && el.contains(a) && (a.isContentEditable || a.value)) return;
+    drawFeed(); drawSide();
+  }));
   return { title: "Community", crumbs: [{ label: "Community" }], el, destroy: stop };
 }

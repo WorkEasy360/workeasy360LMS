@@ -282,6 +282,7 @@ export function AnalyticsPage(ctx) {
     filterBar, tabsEl, body,
   );
   const offSession = bus.on("session", () => root.isConnected && draw());
+  const offSync = bus.on("sync:learning", () => root.isConnected && draw()); // live: a learner finished something somewhere
   draw();
-  return { title: "Analytics", crumbs: [{ label: "Analytics" }], el: root, destroy: () => { token++; offSession(); } };
+  return { title: "Analytics", crumbs: [{ label: "Analytics" }], el: root, destroy: () => { token++; offSession(); offSync(); } };
 }

@@ -14,6 +14,75 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
   const json = async (r) => ({ status: r.status, body: await r.json().catch(() => null) });
   const settled = async () => { const t0 = Date.now(); let last = t0; const off = bus.on("route", () => (last = Date.now())); await waitFor(() => Date.now() - Math.max(last, t0) > 1500, 12000, "route quiet period"); off(); };
 
+  // Real-time synchronization: changes made by ANOTHER user (over raw fetch with their own token) must reach this
+  // browser session live over the SSE stream — no navigation, no refresh. Covers admin→learner (catalog, enrolment,
+  // notification, community, settings) and learner→staff (progress reaching an admin's Learners view).
+  suites.realtime = async () => {
+    const BASE = "http://localhost:8080/api";
+    const otherLogin = async (email) => (await (await fetch(BASE + "/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: DEMO_PASSWORD }) })).json()).token;
+    const as = (tok) => (path, method = "POST", body) => fetch(BASE + path, { method, headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+    await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
+    const meId = getUser().id;
+    await sleep(2000); // let this session's SSE stream connect (ticket + EventSource handshake)
+
+    const adm = as(await otherLogin(DEMO_EMAIL_BY_ROLE.admin));
+    const title = `Realtime ${Date.now()}`;
+    const cId = "c-rt" + Date.now().toString(36);
+
+    // 1. Admin builds + publishes a course; the learner's open Explore page shows it with no refresh.
+    navigate("/explore"); await waitFor(() => document.getElementById("main")?.textContent.includes("Explore"), 4000, "explore page");
+    ok((await adm("/courses", "POST", { id: cId, title })).ok, "setup: admin created a course over the API");
+    const tree1 = await (await adm(`/courses/${cId}/modules`, "POST", { title: "Module 1" })).json(); // returns the whole course tree
+    const tree2 = await (await adm(`/courses/${cId}/modules/${tree1.modules[0].id}/lessons`, "POST", { title: "Lesson 1", type: "LESSON" })).json();
+    const lesson = tree2.modules[0].lessons[0];
+    ok(!!lesson?.id, "setup: lesson created");
+    ok((await adm(`/courses/${cId}/publish`)).ok, "setup: admin published it");
+    await waitFor(() => load("courses").some((c) => c.id === cId), 15000, "published course reaches the learner's cache live");
+    ok(load("courses").some((c) => c.id === cId), "the published course reached the learner's session live");
+    await waitFor(() => document.getElementById("main").textContent.includes(title), 8000, "published course visible in Explore live");
+    ok(document.getElementById("main").textContent.includes(title), "a course published by the admin appeared in the open Explore page without refresh");
+
+    // 2. Admin assigns this learner: enrolment + its notification arrive live.
+    ok((await adm(`/courses/${cId}/learners/${meId}`, "POST", {})).ok, "setup: admin assigned the learner");
+    await waitFor(() => load("enrollments").some((e) => e.userId === meId && e.courseId === cId), 12000, "live enrolment");
+    ok(true, "the enrolment reached the learner's session live");
+    await waitFor(() => load("notifications").some((n) => n.userId === meId && n.kind === "enrolment" && n.href === `/learn/${cId}`), 12000, "live notification");
+    ok(true, "the enrolment notification appeared without refresh");
+
+    // 3. Community: a discussion posted by the admin shows up in the open feed.
+    navigate("/community"); await waitFor(() => q(".community"), 4000, "community page");
+    document.activeElement?.blur?.(); // the live redraw politely skips while someone is typing — make sure nobody is
+    const postText = "Realtime discussion " + Date.now();
+    ok((await adm("/community/posts", "POST", { kind: "discussion", title: postText, body: postText })).ok, "setup: admin posted a discussion");
+    await waitFor(() => document.getElementById("main").textContent.includes(postText), 15000, "post appears live");
+    ok(true, "a discussion posted by the admin appeared in the open Community feed without refresh");
+
+    // 4. Settings: an org-wide change lands in this session's cache live.
+    const prevName = (load("settings")[0] || {}).orgName;
+    const rtName = "RT Org " + Date.now().toString(36);
+    await adm("/settings", "PUT", { orgName: rtName });
+    await waitFor(() => (load("settings")[0] || {}).orgName === rtName, 12000, "live settings");
+    ok(true, "an organisation-name change by the admin reached this session live");
+    await adm("/settings", "PUT", { orgName: prevName || "WorkEasy360" });
+
+    // 5. The other direction: a learner's progress reaches a signed-in admin's Learners view live.
+    const learnerToken = await otherLogin(DEMO_EMAIL_BY_ROLE.learner);
+    await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
+    navigate("/learners"); await waitFor(() => document.getElementById("main")?.textContent.includes("Learners"), 5000, "learners page");
+    await sleep(2000); // admin session's stream connects
+    const lrn = as(learnerToken);
+    ok((await lrn(`/lessons/${lesson.id}/progress`, "POST", { complete: true })).ok, "setup: learner completed the lesson over the API");
+    await waitFor(() => {
+      const e = load("enrollments").find((x) => x.userId === meId && x.courseId === cId);
+      return !!e && !!(e.lastActiveAt || e.completedAt); // activity/completion dates come from the live staff pull
+    }, 15000, "learner progress reaches the admin session live");
+    ok(true, "a learner's lesson completion reached the signed-in admin's session without refresh");
+
+    // Cleanup so reruns stay tidy.
+    await adm(`/courses/${cId}`, "DELETE");
+  };
+
   // Password reset: self-service request, admin-issued link, single use, expiry of old links, and the two public pages.
   suites.passwordReset = async () => {
     await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);

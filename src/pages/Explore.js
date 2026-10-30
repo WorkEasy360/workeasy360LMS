@@ -57,6 +57,7 @@ export function ExplorePage(ctx) {
     ]),
   ]);
   const stop = withLoading(results, () => { draw(); return results.firstChild; }, { delay: 200, skeleton: () => h("div", { class: "grid grid-auto" }, [1, 2, 3, 4].map(() => h("div", { class: "skeleton", style: "height:260px" }))) });
+  ["data:courses", "data:enrollments"].forEach((ev) => bus.on(ev, () => results.isConnected && draw())); // live catalog updates
   return { title: "Explore", crumbs: [{ label: "Explore" }], el, destroy: stop };
 }
 

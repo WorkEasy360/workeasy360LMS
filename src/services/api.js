@@ -67,6 +67,7 @@ export const api = {
   updateUser: (id, patch) => put(`/users/${id}`, patch), // admin: role/title/dept/status
   deleteUser: (id) => del(`/users/${id}`), // admin: permanent; refused for yourself and for instructors who still own courses
   notifications: () => get("/notifications"),
+  syncTicket: () => post("/sync/ticket"), // one-time ticket for the real-time event stream
   markNotificationRead: (id) => post(`/notifications/${id}/read`),
   markAllNotificationsRead: () => post("/notifications/read-all"),
   systemStatus: () => get("/system/status"), // admin: database, storage, AI provider, CORS — no secrets

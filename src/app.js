@@ -6,6 +6,7 @@ import { hydrateMyLearning } from "./services/learningSync.js";
 import { hydrateCommunity } from "./services/communitySync.js";
 import { hydrateSkills } from "./services/skillsSync.js";
 import { hydrateUsers, hydrateNotifications, hydrateSettings } from "./services/people.js";
+import "./services/realtime.js"; // live cross-panel updates: SSE stream → targeted re-hydration
 import { h, mount } from "./lib/dom.js";
 import { initShell, setPage } from "./layout/Shell.js";
 import { initGuidePanel } from "./guide/GuidePanel.js";

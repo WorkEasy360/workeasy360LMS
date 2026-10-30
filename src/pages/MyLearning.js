@@ -1,4 +1,5 @@
 import { h } from "../lib/dom.js";
+import { bus } from "../lib/events.js";
 import { Button } from "../components/Button.js";
 import { Tabs } from "../components/Tabs.js";
 import { PageHeader, Card } from "../components/Card.js";
@@ -10,16 +11,20 @@ import { enrollmentsFor, courseProgress, nextLesson } from "../services/learning
 import { getCourse } from "../services/courses.js";
 
 export function MyLearningPage(ctx) {
-  const items = enrollmentsFor(ctx.user.id).map((e) => ({ e, course: getCourse(e.courseId) })).filter((x) => x.course)
-    .map((x) => ({ ...x, p: courseProgress(ctx.user.id, x.course.id), next: nextLesson(x.course, x.e) }));
-  const groups = {
-    active: items.filter((x) => x.p.status === "in-progress"),
-    todo: items.filter((x) => x.p.status === "not-started"),
-    done: items.filter((x) => x.p.status === "completed"),
-    purchased: items.filter((x) => x.e.source === "PURCHASE"),
+  const compute = () => {
+    const items = enrollmentsFor(ctx.user.id).map((e) => ({ e, course: getCourse(e.courseId) })).filter((x) => x.course)
+      .map((x) => ({ ...x, p: courseProgress(ctx.user.id, x.course.id), next: nextLesson(x.course, x.e) }));
+    return {
+      active: items.filter((x) => x.p.status === "in-progress"),
+      todo: items.filter((x) => x.p.status === "not-started"),
+      done: items.filter((x) => x.p.status === "completed"),
+      purchased: items.filter((x) => x.e.source === "PURCHASE"),
+    };
   };
+  let groups = compute();
   let tab = groups.active.length ? "active" : groups.todo.length ? "todo" : "done";
   const list = h("div");
+  const tabHost = h("div");
   const empties = {
     active: ["book", "Nothing in progress", "Start a course from the catalog."],
     todo: ["clock", "No assigned courses waiting", "Courses assigned to you will appear here."],
@@ -35,11 +40,18 @@ export function MyLearningPage(ctx) {
       }))
       : Card(EmptyState({ icon: empties[tab][0], title: empties[tab][1], description: empties[tab][2], action: Button({ label: "Explore courses", variant: "primary", href: "/explore" }) })));
   };
+  const paintTabs = () => tabHost.replaceChildren(
+    Tabs({ tabs: [{ id: "active", label: "In progress", count: groups.active.length }, { id: "todo", label: "Not started", count: groups.todo.length }, { id: "done", label: "Completed", count: groups.done.length }, { id: "purchased", label: "Purchased", count: groups.purchased.length }], active: tab, onChange: (t) => { tab = t; draw(); }, label: "Learning status" }));
   draw();
+  paintTabs();
   const el = h("div", { class: "stack-lg" }, [
     PageHeader({ title: "My learning", sub: "Everything you've started, been assigned or finished.", actions: [GuideButton("first-lesson"), Button({ label: "Explore", icon: "compass", href: "/explore" })] }),
-    Tabs({ tabs: [{ id: "active", label: "In progress", count: groups.active.length }, { id: "todo", label: "Not started", count: groups.todo.length }, { id: "done", label: "Completed", count: groups.done.length }, { id: "purchased", label: "Purchased", count: groups.purchased.length }], active: tab, onChange: (t) => { tab = t; draw(); }, label: "Learning status" }),
+    tabHost,
     list,
   ]);
+  ["data:enrollments", "data:courses", "data:certificates"].forEach((ev) => bus.on(ev, () => { // live updates (an assignment, a new course)
+    if (!list.isConnected) return;
+    groups = compute(); draw(); paintTabs();
+  }));
   return { title: "My learning", crumbs: [{ label: "My Learning" }], el };
 }

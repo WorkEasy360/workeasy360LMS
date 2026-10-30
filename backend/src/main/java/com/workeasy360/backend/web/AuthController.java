@@ -55,7 +55,7 @@ public class AuthController {
         if (!encoder.matches(req.password(), u.getPasswordHash())) throw failed(email);
         if ("INACTIVE".equalsIgnoreCase(u.getStatus())) throw new BadCredentialsException("bad credentials"); // deactivated accounts cannot sign in
         loginFails.remove(email);
-        String token = jwt.issue(u.getId(), u.getRole().name());
+        String token = jwt.issue(u.getId(), u.getRole().name(), com.workeasy360.backend.security.CurrentUser.DEFAULT_ORG);
         try { notifications.reminders(u.getId()); } catch (RuntimeException ignored) { /* reminders never block sign-in */ }
         return new LoginResponse(token, UserDto.of(u));
     }
@@ -77,7 +77,7 @@ public class AuthController {
                 .title("Learner").dept("Self-registered").hue((int) (Math.abs(email.hashCode()) % 360)).status("ACTIVE").streak(0).build();
         try { u = users.save(u); }
         catch (org.springframework.dao.DataIntegrityViolationException e) { throw ApiException.conflict("An account with that e-mail already exists. Sign in instead."); }
-        return new LoginResponse(jwt.issue(u.getId(), u.getRole().name()), UserDto.of(u));
+        return new LoginResponse(jwt.issue(u.getId(), u.getRole().name(), com.workeasy360.backend.security.CurrentUser.DEFAULT_ORG), UserDto.of(u));
     }
 
     /** Self-service "forgot password". Always answers 200 so the endpoint never reveals whether an account exists;
@@ -114,7 +114,7 @@ public class AuthController {
         User u = passwordResets.reset(req == null ? null : req.token(), req == null ? null : req.password());
         if ("INACTIVE".equalsIgnoreCase(u.getStatus())) throw ApiException.badRequest("That reset link is no longer valid. Request a new one.");
         loginFails.remove(u.getEmail().toLowerCase()); // a fresh password clears any brute-force lock
-        return new LoginResponse(jwt.issue(u.getId(), u.getRole().name()), UserDto.of(u));
+        return new LoginResponse(jwt.issue(u.getId(), u.getRole().name(), com.workeasy360.backend.security.CurrentUser.DEFAULT_ORG), UserDto.of(u));
     }
 
     /** Signed-in password change: proves the current password, applies the same strength rules as registration. */

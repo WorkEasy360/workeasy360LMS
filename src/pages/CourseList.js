@@ -1,6 +1,7 @@
 // Course management list. Instructor: "My Courses" (own courses). Admin: "Learning" (all courses + management actions).
 // One implementation for both roles — actions are shown according to permissions (see services/permissions.js).
 import { h, timeAgo, pluralize, fmtDate } from "../lib/dom.js";
+import { bus } from "../lib/events.js";
 import { Button } from "../components/Button.js";
 import { Dropdown } from "../components/Menu.js";
 import { Tabs } from "../components/Tabs.js";
@@ -131,5 +132,6 @@ export function CourseListPage(ctx) {
   ]);
   const stop = withLoading(listEl, () => { draw(); return [...listEl.childNodes]; }, { delay: 160, skeleton: () => h("div", { class: "stack" }, [1, 2, 3].map(() => h("div", { class: "skeleton", style: "height:96px" }))) });
   paintTabs();
+  ["data:courses", "data:enrollments"].forEach((ev) => bus.on(ev, () => listEl.isConnected && draw())); // live updates from other panels
   return { title: isAdmin ? "Learning" : "My Courses", crumbs: [{ label: isAdmin ? "Learning" : "My Courses" }], el, destroy: stop };
 }

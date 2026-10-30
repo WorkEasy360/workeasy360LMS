@@ -47,11 +47,12 @@ public class JwtService {
         this.expiryMinutes = expiryMinutes;
     }
 
-    public String issue(String userId, String role) {
+    public String issue(String userId, String role, String orgId) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(userId)
                 .claim("role", role)
+                .claim("org", orgId)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(expiryMinutes * 60)))
                 .signWith(key)
