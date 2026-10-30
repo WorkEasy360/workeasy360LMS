@@ -87,10 +87,13 @@ export function logout() {
 export const DEMO_USER_BY_ROLE = { learner: "u-maya", instructor: "u-daniel", admin: "u-priya" };
 export const DEMO_EMAIL_BY_ROLE = { learner: "maya@workeasy360.dev", instructor: "daniel@workeasy360.dev", admin: "admin@workeasy360.dev" };
 export const DEMO_PASSWORD = "password123";
-// Demo entry points (one-click demo workspaces on the sign-in page, the `?as=<role>` shortcut) exist for local
-// development and the test suites. A deployment that sets `window.WE360_API_BASE` hides them unless it also sets
-// `window.WE360_DEMO = true`.
-export const DEMO_ENABLED = typeof window === "undefined" ? true : window.WE360_DEMO ?? !window.WE360_API_BASE;
+// Demo tooling (one-click demo workspaces on the sign-in page, the `?as=<role>` shortcut, "View as") exists for the
+// automated test suites and for explicit demos ONLY. It activates when the test runner's query parameters are present
+// (`?as=` / `?selftest=`, which hash navigation preserves for the whole session) or when a page sets
+// `window.WE360_DEMO = true`. Plain browsing — any environment, localhost included — is real-accounts only.
+export const DEMO_ENABLED = typeof window === "undefined"
+  ? false
+  : window.WE360_DEMO ?? (!window.WE360_API_BASE && /(^|[?&])(as|selftest)=/.test(window.location.search));
 
 // ---- real backend auth ----
 // Signs in against the Java backend (backend/) and keeps the existing localStorage session in lock-step, using

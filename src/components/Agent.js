@@ -86,7 +86,7 @@ function drawHead() {
     history ? iconBtn("chevron-left", "Back to chat", () => { st.view = "chat"; render(); input.focus(); }) : AgentAvatar(28, "agent-head-avatar"),
     h("div", { class: "grow" }, history
       ? h("div", { class: "agent-title" }, "Conversation history")
-      : [h("div", { class: "agent-title" }, NAME), h("div", { class: "agent-sub" }, st.lessonId ? "Knows the lesson you're on" : "Your learning coach")]),
+      : [h("div", { class: "agent-title" }, NAME), h("div", { class: "agent-sub" }, st.lessonId ? "Knows the lesson you're on" : ROLE_SUB[getUser()?.role] || ROLE_SUB.learner)]),
     !history && iconBtn("message", "View conversation history", () => { st.view = "history"; render(); }, { "data-agent-history": "" }),
     !history && iconBtn("plus", "New conversation", () => newChat(), { "data-agent-new": "" }),
     iconBtn("expand", "Open the full Learning Coach", () => { setOpen(false); navigate(st.lessonId ? `/coach?lessonId=${encodeURIComponent(st.lessonId)}` : "/coach"); }),
@@ -105,15 +105,27 @@ function drawChat() {
   log.scrollTop = log.scrollHeight;
 }
 
+// The agent serves each panel in its own terms: learning for learners, teaching for instructors, operations for admins.
+const ROLE_SUB = { learner: "Your learning coach", instructor: "Your teaching assistant", admin: "Your LMS operations assistant" };
+const ROLE_EMPTY_SUB = {
+  learner: "Ask about your courses, progress and skills, or take a guided tour.",
+  instructor: "Ask about your courses, reviews and learners, or take a guided tour.",
+  admin: "Ask how to run your organisation's learning — people, courses, analytics, settings.",
+};
+const ROLE_PROMPTS = {
+  instructor: ["What needs my review?", "How are my learners doing?", "How do I build and publish a course?", "How do skills and certificates work for my courses?"],
+  admin: ["How is learning across the organisation?", "How do I add instructors and learners?", "How do certificates and the organisation logo work?", "What do the automation rules control?"],
+};
+
 function emptyState() {
   const user = getUser();
-  const prompts = (st.lessonId ? LESSON_PROMPTS : SUGGESTED_PROMPTS).slice(0, 4);
+  const prompts = (st.lessonId ? LESSON_PROMPTS : ROLE_PROMPTS[user.role] || SUGGESTED_PROMPTS).slice(0, 4);
   const suggested = contextGuide(st.path, user.role);
   const tours = [suggested, ...guidesForRole(user.role).filter((g) => g.id !== suggested?.id)].filter(Boolean).slice(0, 3);
   return h("div", { class: "agent-empty", "data-agent-empty": "" }, [
     AgentAvatar(72, "agent-empty-avatar"),
     h("p", { class: "agent-empty-title" }, "What can I help with?"),
-    h("p", { class: "agent-empty-sub" }, st.lessonId ? "Ask about the lesson you're on, or about your progress and skills." : "Ask about your courses, progress and skills, or take a guided tour."),
+    h("p", { class: "agent-empty-sub" }, st.lessonId ? "Ask about the lesson you're on, or about your progress and skills." : ROLE_EMPTY_SUB[user.role] || ROLE_EMPTY_SUB.learner),
     h("div", { class: "agent-suggestions" }, prompts.map((p) => h("button", { class: "agent-suggestion", type: "button", "data-agent-prompt": "", onclick: () => { input.value = p; send(); } }, p))),
     tours.length > 0 && h("div", { class: "agent-tours" }, [
       h("div", { class: "agent-tours-label" }, "Guided tours"),

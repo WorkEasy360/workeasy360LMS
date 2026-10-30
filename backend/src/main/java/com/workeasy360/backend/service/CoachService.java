@@ -77,7 +77,7 @@ public class CoachService {
         conv.setUpdatedAt(Instant.now()); conversations.save(conv);
 
         String contextJson = contextService.toJson(ctx, recRows).toString();
-        String user = Prompts.coachUser(contextJson, lessonJson == null ? null : lessonJson.toString(), history, text);
+        String user = Prompts.coachUser(u.getRole().name(), contextJson, lessonJson == null ? null : lessonJson.toString(), history, text);
         String hash = sha256("COACH|" + u.getId() + "|" + text + "|" + (req.lessonId() == null ? "" : req.lessonId()) + "|" + contextJson.hashCode());
         if (!provider.configured()) throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "The learning coach isn't available right now (AI provider '" + provider.name() + "' is not configured). Your recommendations still work.");
         AiGeneration g = generations.save(AiGeneration.builder().userId(u.getId()).type(AiGeneration.Type.COACH).status(AiGeneration.Status.PENDING).provider(provider.name()).model(provider.model())

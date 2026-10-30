@@ -80,9 +80,43 @@ public class MockAiProvider implements AiProvider {
         String u = prompt.user();
         JsonNode ctx = block(u, "Learner context (JSON):\n"), lesson = block(u, "Current lesson (JSON):\n");
         String question = u.substring(u.lastIndexOf("Question: ") + 10).trim().toLowerCase();
+        java.util.regex.Matcher rm = Pattern.compile("User role: (\\w+)").matcher(u);
+        String role = rm.find() ? rm.group(1) : "LEARNER";
         ObjectNode out = Json.MAPPER.createObjectNode();
         ArrayNode actions = out.putArray("actions");
         String name = ctx == null ? "there" : ctx.path("learner").path("name").asText("there").split(" ")[0];
+        // Instructors and administrators get answers for THEIR panel, not learner recommendations. The offline
+        // provider keeps this deterministic and honest: it explains where each job lives in the product.
+        if (!"LEARNER".equals(role)) {
+            boolean admin = "ADMIN".equals(role);
+            StringBuilder staff = new StringBuilder();
+            if (question.contains("review") || question.contains("submission") || question.contains("assignment")) {
+                staff.append(admin ? "Submissions awaiting feedback are under each course's Assessments view. " : "Open Assessments to see every submission waiting on your feedback, newest first. ")
+                     .append("Reviewing one marks it for the learner and counts as assessed evidence for their skills.");
+            } else if (question.contains("add") || question.contains("invite") || question.contains("people") || question.contains("instructor") || question.contains("password")) {
+                staff.append(admin ? "People is where you add instructors and learners (they get a one-time temporary password), change roles, deactivate accounts and hand out password-reset links."
+                                   : "Adding people is an administrator job (People page). You can assign existing learners to your courses from the course's Learners view.");
+            } else if (question.contains("learner") || question.contains("progress") || question.contains("doing") || question.contains("complete")) {
+                staff.append(admin ? "Analytics shows the whole organisation: completion, assessment scores, skills and per-course funnels, filterable by period. "
+                                   : "Your Learners page lists everyone enrolled in your courses with their progress; Analytics shows per-course funnels and drop-off. ")
+                     .append("Click any course there for its learner-by-learner detail.");
+            } else if (question.contains("course") || question.contains("build") || question.contains("create") || question.contains("publish") || question.contains("quiz")) {
+                staff.append("The Course Builder gives you modules, lessons, videos, quizzes and assignments; \"Create with AI\" drafts a full course you review before publishing. ")
+                     .append(admin ? "As an admin you can edit and publish any course." : "Publish when the readiness checklist is green.");
+            } else if (question.contains("certificat") || question.contains("skill")) {
+                staff.append(admin ? "Certificates are issued automatically on course completion and verified publicly by ID; set your organisation's name and logo for them under Settings. The Skills library and per-skill analytics live under Skills."
+                                   : "Certificates issue automatically when a learner completes your course. Map skills to your lessons in the Builder so completions build measurable skill levels.");
+            } else if (question.contains("setting") || question.contains("automation") || question.contains("notification") || question.contains("email") || question.contains("logo")) {
+                staff.append(admin ? "Settings holds the organisation name, certificate logo, video limits and publishing policy; Automation switches each notification rule on or off. With SMTP configured, notifications also go out by e-mail."
+                                   : "Organisation settings and notification rules are managed by an administrator under Settings and Automation.");
+            } else {
+                staff.append(admin ? "As the administrator, your panel covers People, courses and publishing, the Skills library, Certifications, organisation-wide Analytics, Settings and Automation. "
+                                   : "As an instructor, your panel covers your courses and the Builder, Assessments to review, your Learners' progress and per-course Analytics. ")
+                     .append("Ask me about any of them — reviews, learner progress, building courses, certificates — or take a guided tour from this panel.");
+            }
+            out.put("reply", staff.toString());
+            return new Completion(out.toString(), name(), model());
+        }
         JsonNode recs = ctx == null ? Json.MAPPER.createArrayNode() : ctx.path("recommendations");
         JsonNode top = recs.isArray() && !recs.isEmpty() ? recs.get(0) : null;
         JsonNode courses = ctx == null ? Json.MAPPER.createArrayNode() : ctx.path("courses");

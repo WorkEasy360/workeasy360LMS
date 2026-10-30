@@ -97,8 +97,11 @@ public final class Prompts {
             the context's next lessons. At most 3 actions. If a "Current lesson" JSON is provided, ground explanations in its content and title.
             """;
 
-    public static String coachUser(String contextJson, String lessonJson, java.util.List<String[]> history, String question) {
+    public static String coachUser(String role, String contextJson, String lessonJson, java.util.List<String[]> history, String question) {
         StringBuilder sb = new StringBuilder();
+        // The authenticated user's role, so the assistant answers for the right panel: learning guidance for
+        // learners, course/review operations for instructors, organisation management for administrators.
+        sb.append("User role: ").append(role == null ? "LEARNER" : role).append('\n');
         sb.append("Learner context (JSON):\n").append(contextJson).append("\n\n");
         if (lessonJson != null) sb.append("Current lesson (JSON):\n").append(lessonJson).append("\n\n");
         if (history != null && !history.isEmpty()) { sb.append("Recent conversation:\n"); for (String[] h : history) sb.append(h[0]).append(": ").append(h[1]).append('\n'); sb.append('\n'); }

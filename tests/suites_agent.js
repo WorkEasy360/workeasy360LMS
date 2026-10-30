@@ -159,6 +159,8 @@ export function registerAgent({ suites, log, ok, sleep, q, click, type, waitFor,
     click(launcher()); await waitFor(() => shown(panel()), 2000, "agent panel");
     const tours = [...document.querySelectorAll("[data-agent-tour]")].map((b) => b.dataset.agentTour);
     ok(tours.length >= 1, `admin gets guided tours in the agent (${tours.join(", ")})`);
+    const adminPrompts = [...document.querySelectorAll("[data-agent-prompt]")].map((b) => b.textContent);
+    ok(/organisation/.test(adminPrompts[0] || "") && adminPrompts.some((p) => /instructors and learners/.test(p)), `the agent speaks the admin's language (${adminPrompts[0]})`);
     const reply = await ask(`How am I doing? (brand ${Date.now()})`);
     ok(!!reply && reply.textContent.trim().length > 10, "admin gets a reply from the assistant");
     click(q("[data-agent-close]"));

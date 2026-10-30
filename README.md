@@ -29,7 +29,7 @@ powershell -File serve.ps1 -Port 5173                      # or: python -m http.
 `backend/.env` is ignored by Git. `tools/` may hold optional, untracked portable copies of the JDK, Maven and
 PostgreSQL for machines without admin rights; `. tools/env.sh` puts them on `PATH` when present and loads `backend/.env`.
 
-Open http://localhost:5173 and sign in with a demo account (only present when demo seeding is on; password
+Open http://localhost:5173 — plain browsing is real-accounts only (sign up, or an admin creates you). The demo workspaces exist solely for tests and demos: open http://localhost:5173/?as=learner (or instructor/admin) to use the seeded demo accounts (only present when demo seeding is on; password
 `password123`): `admin@workeasy360.dev` (admin), `daniel@workeasy360.dev` (instructor), `maya@workeasy360.dev`
 (learner). The API listens on http://localhost:8080 (OpenAPI UI at `/docs`).
 
