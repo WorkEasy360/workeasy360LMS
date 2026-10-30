@@ -65,6 +65,7 @@ export const api = {
   users: (role) => get("/users" + (role ? `?role=${role}` : "")),
   createUser: (body) => post("/users", body), // admin; returns {user, temporaryPassword} (password shown once, never stored in clear)
   updateUser: (id, patch) => put(`/users/${id}`, patch), // admin: role/title/dept/status
+  deleteUser: (id) => del(`/users/${id}`), // admin: permanent; refused for yourself and for instructors who still own courses
   notifications: () => get("/notifications"),
   markNotificationRead: (id) => post(`/notifications/${id}/read`),
   markAllNotificationsRead: () => post("/notifications/read-all"),

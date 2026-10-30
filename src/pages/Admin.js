@@ -1,5 +1,6 @@
 // Admin pages: People, Automation, Integrations (platform status), Settings.
 import { h, timeAgo } from "../lib/dom.js";
+import { bus } from "../lib/events.js";
 import { icon as ico } from "../lib/icons.js";
 import { Button } from "../components/Button.js";
 import { PageHeader, Card } from "../components/Card.js";
@@ -9,7 +10,7 @@ import { EmptyState, LoadingState, ErrorState } from "../components/States.js";
 import { Field, Input, Select, SearchInput, Switch } from "../components/Form.js";
 import { openModal, toast, confirmDialog } from "../components/Overlay.js";
 import { resetAll, logout, isBackendOnline } from "../lib/store.js";
-import { users, settings, updateSettings, createUser, updateUser, requestPasswordReset, automationRules } from "../services/people.js";
+import { users, settings, updateSettings, createUser, updateUser, deleteUser, requestPasswordReset, automationRules } from "../services/people.js";
 import { enrollmentsFor, courseProgress } from "../services/learning.js";
 import { api } from "../services/api.js";
 import { guideEngine } from "../guide/GuideEngine.js";
@@ -39,6 +40,7 @@ export function PeoplePage(ctx) {
     ])) : Card(EmptyState({ icon: "users", title: "No people match", description: "Try another search or filter." })));
   };
   draw();
+  bus.on("data:users", () => body.isConnected && draw()); // backend hydration after sign-in lands here
 
   const invite = () => {
     const name = Input({ placeholder: "Full name", "data-people-name": "" }), email = Input({ type: "email", placeholder: "name@company.com", "data-people-email": "" });
@@ -83,8 +85,18 @@ export function PeoplePage(ctx) {
       } catch (ex) { err.textContent = ex.message || "Could not issue a reset link."; err.hidden = false; }
       finally { resetBtn.disabled = false; }
     } });
-    openModal({ title: `Edit ${u.name}`, size: "sm",
-      content: h("div", { class: "stack" }, [Field({ label: "Role", hint: self ? "You can't change your own role." : null, control: roleSel }), Field({ label: "Title", control: title }), Field({ label: "Team", control: dept }), !self && Field({ label: "Status", control: status }), h("div", { class: "row-sm" }, [resetBtn, h("span", { class: "xs muted" }, "For someone locked out of their account.")]), err]),
+    const deleteBtn = self ? null : Button({ label: "Delete person", icon: "trash", variant: "ghost", size: "sm", attrs: { "data-people-delete": "", style: "color:var(--c-danger)" }, onClick: async () => {
+      const ok = await confirmDialog({ title: `Delete ${u.name}?`, message: "This permanently removes their account, progress, certificates and posts. It cannot be undone. Instructors who still own courses can't be deleted until their courses are reassigned or deleted.", confirmLabel: "Delete permanently", danger: true });
+      if (!ok) return;
+      deleteBtn.disabled = true;
+      try {
+        await deleteUser(u.id);
+        editModal?.close();
+        draw(); toast(`${u.name} deleted`);
+      } catch (ex) { err.textContent = ex.message || "Could not delete this person."; err.hidden = false; deleteBtn.disabled = false; }
+    } });
+    const editModal = openModal({ title: `Edit ${u.name}`, size: "sm",
+      content: h("div", { class: "stack" }, [Field({ label: "Role", hint: self ? "You can't change your own role." : null, control: roleSel }), Field({ label: "Title", control: title }), Field({ label: "Team", control: dept }), !self && Field({ label: "Status", control: status }), h("div", { class: "row-sm" }, [resetBtn, h("span", { class: "xs muted" }, "For someone locked out of their account.")]), deleteBtn && h("div", { class: "row-sm" }, [deleteBtn, h("span", { class: "xs muted" }, "Permanent: removes their progress, certificates and posts.")]), err]),
       footer: (close) => [Button({ label: "Cancel", onClick: close }), Button({ label: "Save", variant: "primary", attrs: { "data-people-save": "" }, onClick: async (e) => {
         const btn = e.currentTarget; btn.disabled = true;
         try {

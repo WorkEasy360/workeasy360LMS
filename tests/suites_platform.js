@@ -132,9 +132,23 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     // New account can sign in with the temporary password; deactivated accounts cannot
     const login = await fetch("http://localhost:8080/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: tempPassword }) });
     ok(login.status === 200, "new person signs in with the temporary password");
-    await apiPut(`/users/${remote.id}`, { status: "INACTIVE" });
+    const inact = await json(await apiPut(`/users/${remote.id}`, { status: "INACTIVE" }));
+    ok(inact.status === 200 && inact.body.status === "INACTIVE", "the update answer carries the new status");
     const login2 = await fetch("http://localhost:8080/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: tempPassword }) });
     ok(login2.status === 401, "deactivated person can no longer sign in");
+    // The directory UI shows the status after a fresh hydration (re-login pulls the backend rows)
+    await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
+    navigate("/people");
+    await waitFor(() => /Inactive/.test(q(`[data-person="${remote.id}"]`)?.textContent || ""), 10000, "Inactive badge on the test person's row");
+    ok(/Inactive/.test(q(`[data-person="${remote.id}"]`)?.textContent || ""), "the People directory shows the Inactive badge after the edit");
+    // Admin delete: guarded (self, course owners) and permanent
+    ok((await apiDel("/users/u-priya")).status === 400, "an admin cannot delete their own account");
+    const owned = ((await apiGet("/courses")) || []).find((c) => c.instructorId && c.instructorId !== "u-priya");
+    if (owned) ok((await apiDel(`/users/${owned.instructorId}`)).status === 409, "an instructor who still owns courses cannot be deleted (409)");
+    ok((await apiDel(`/users/${remote.id}`)).status === 200, "admin deletes the test person");
+    ok((await apiRaw(`/users/${remote.id}`)).status === 404, "the deleted person is gone from the API");
+    const login3 = await fetch("http://localhost:8080/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: tempPassword }) });
+    ok(login3.status === 401, "the deleted person can no longer sign in");
     // Privacy: a learner sees no e-mail addresses in the directory, and cannot manage users
     await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
     const dir = (await apiGet("/users")) || [];
@@ -143,6 +157,7 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     ok(forbidden.status === 403, "learner cannot create users (403)");
     const forbidden2 = await json(await apiPut(`/users/u-maya`, { role: "admin" }));
     ok(forbidden2.status === 403, "learner cannot promote themself (403)");
+    ok((await apiDel("/users/u-daniel")).status === 403, "learner cannot delete people (403)");
   };
 
   // 2. Instructor assigns a learner (with due date) → enrolment + notification on the backend; learner sees it after sign-in.

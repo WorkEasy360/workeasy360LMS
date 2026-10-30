@@ -29,15 +29,17 @@ public class UserController {
     private final UserRepo users; private final PermissionService perm; private final PasswordEncoder encoder;
     private final com.workeasy360.backend.service.PasswordResetService passwordResets;
     private final com.workeasy360.backend.service.MailService mail;
+    private final com.workeasy360.backend.service.UserDeleteService deleter;
     public UserController(UserRepo users, PermissionService perm, PasswordEncoder encoder,
-                          com.workeasy360.backend.service.PasswordResetService passwordResets, com.workeasy360.backend.service.MailService mail) {
-        this.users = users; this.perm = perm; this.encoder = encoder; this.passwordResets = passwordResets; this.mail = mail;
+                          com.workeasy360.backend.service.PasswordResetService passwordResets, com.workeasy360.backend.service.MailService mail,
+                          com.workeasy360.backend.service.UserDeleteService deleter) {
+        this.users = users; this.perm = perm; this.encoder = encoder; this.passwordResets = passwordResets; this.mail = mail; this.deleter = deleter;
     }
 
     private UserDto view(CurrentUser me, User u) {
         UserDto d = UserDto.of(u);
         boolean full = perm.isAdmin(me) || me.getId().equals(u.getId());
-        return full ? d : new UserDto(d.id(), d.name(), null, d.role(), d.title(), d.dept(), d.hue(), d.streak());
+        return full ? d : new UserDto(d.id(), d.name(), null, d.role(), d.title(), d.dept(), d.hue(), d.streak(), d.status());
     }
 
     @GetMapping
@@ -82,6 +84,15 @@ public class UserController {
         if (req.status() != null && List.of("ACTIVE", "INACTIVE").contains(req.status().toUpperCase())) u.setStatus(req.status().toUpperCase());
         u.setUpdatedAt(Instant.now());
         return UserDto.of(users.save(u));
+    }
+
+    /** Permanently removes a person and their personal data (progress, certificates, posts, coach history). Refused
+     *  for yourself and for instructors who still own courses — those must be reassigned or deleted first. */
+    @DeleteMapping("/{id}")
+    public Map<String, Object> delete(@AuthenticationPrincipal CurrentUser me, @PathVariable String id) {
+        if (!perm.isAdmin(me)) throw ApiException.forbidden("Only an admin can delete people");
+        deleter.delete(me.getId(), id);
+        return Map.of("ok", true);
     }
 
     /** Admin-issued password reset: returns the reset path once, for the admin to hand over (and e-mails it to the

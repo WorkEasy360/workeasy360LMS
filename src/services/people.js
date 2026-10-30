@@ -17,7 +17,7 @@ export const settings = () => load("settings")[0];
 
 /** Backend user → local directory row (the backend omits e-mail for everyone but admins and the user themself). */
 function toLocalUser(d, cur = {}) {
-  return { ...cur, id: d.id, name: d.name, email: d.email ?? cur.email ?? "", role: String(d.role).toLowerCase(), title: d.title ?? cur.title ?? "", dept: d.dept ?? cur.dept ?? "", hue: d.hue ?? cur.hue ?? 250, streak: d.streak ?? cur.streak ?? 0, joinedAt: cur.joinedAt ?? Date.now(), base: cur.base || {}, targets: cur.targets || {} };
+  return { ...cur, id: d.id, name: d.name, email: d.email ?? cur.email ?? "", role: String(d.role).toLowerCase(), title: d.title ?? cur.title ?? "", dept: d.dept ?? cur.dept ?? "", hue: d.hue ?? cur.hue ?? 250, streak: d.streak ?? cur.streak ?? 0, status: d.status ?? cur.status ?? "ACTIVE", joinedAt: cur.joinedAt ?? Date.now(), base: cur.base || {}, targets: cur.targets || {} };
 }
 
 export async function hydrateUsers() {
@@ -58,6 +58,14 @@ export async function updateUser(id, patch) {
   } else Object.assign(u, patch);
   save("users");
   return u;
+}
+
+/** Admin: permanently delete a person and their personal data. The backend refuses self-deletion and instructors who
+ *  still own courses (reassign or delete the courses first); offline it only removes the local demo row. */
+export async function deleteUser(id) {
+  if (isBackendOnline()) await api.deleteUser(id);
+  replace("users", users().filter((u) => u.id !== id));
+  replace("notifications", load("notifications").filter((n) => n.userId !== id));
 }
 
 // ---------- notifications ----------
