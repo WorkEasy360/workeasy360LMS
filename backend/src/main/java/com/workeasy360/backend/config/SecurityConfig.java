@@ -39,6 +39,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**", "/docs/**", "/v3/api-docs/**", "/swagger-ui/**", "/actuator/health").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/certificates/verify/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/sync/stream").permitAll() // authenticated by its one-time ticket
+                .requestMatchers("/api/public/**").permitAll() // plan catalogue + self-serve company registration
                 .anyRequest().authenticated()
             )
             // Missing/expired/invalid token → 401 (the frontend treats it as "session expired"); wrong role → 403.

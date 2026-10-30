@@ -11,11 +11,38 @@ public class Repos {
     public interface UserRepo extends JpaRepository<User, String> {
         Optional<User> findByEmailIgnoreCase(String email);
         List<User> findByRole(Enums.Role role);
+        List<User> findByOrgId(String orgId);
+        List<User> findByOrgIdAndRole(String orgId, Enums.Role role);
+        long countByOrgId(String orgId);
+        long countByRole(Enums.Role role);
     }
 
     public interface CourseRepo extends JpaRepository<Course, String> {
         List<Course> findByInstructorId(String instructorId);
         List<Course> findByStatus(Enums.CourseStatus status);
+        List<Course> findByOrgId(String orgId);
+        List<Course> findByOrgIdAndStatus(String orgId, Enums.CourseStatus status);
+        long countByOrgId(String orgId);
+    }
+
+    public interface OrganizationRepo extends JpaRepository<Organization, String> {
+        Optional<Organization> findBySlugIgnoreCase(String slug);
+        long countByStatus(String status);
+    }
+
+    public interface PlanRepo extends JpaRepository<Plan, String> {
+        List<Plan> findByStatusOrderByPositionAsc(String status);
+    }
+
+    public interface SubscriptionRepo extends JpaRepository<Subscription, String> {
+        Optional<Subscription> findFirstByOrgIdOrderByCreatedAtDesc(String orgId);
+        Optional<Subscription> findByOrderRef(String orderRef);
+        long countByStatus(String status);
+    }
+
+    public interface AuditEventRepo extends JpaRepository<AuditEvent, String> {
+        List<AuditEvent> findTop200ByOrderByAtDesc();
+        List<AuditEvent> findTop200ByOrgIdOrderByAtDesc(String orgId);
     }
 
     public interface ModuleRepo extends JpaRepository<CourseModule, String> {
@@ -74,7 +101,9 @@ public class Repos {
         List<Certificate> findByCourseIdIn(java.util.Collection<String> courseIds);
     }
 
-    public interface GroupRepo extends JpaRepository<Group, String> {}
+    public interface GroupRepo extends JpaRepository<Group, String> {
+        List<Group> findByOrgId(String orgId);
+    }
     public interface GroupMemberRepo extends JpaRepository<GroupMember, GroupMember.Key> {
         List<GroupMember> findByGroupId(String groupId);
     }
@@ -83,6 +112,7 @@ public class Repos {
         List<Post> findByGroupId(String groupId);
         List<Post> findByCourseId(String courseId);
         List<Post> findByCourseIdAndLessonId(String courseId, String lessonId);
+        List<Post> findByOrgId(String orgId);
     }
     public interface CommentRepo extends JpaRepository<Comment, String> {
         List<Comment> findByPostId(String postId);
@@ -149,8 +179,12 @@ public class Repos {
     }
 
     // ---- skills engine ----
-    public interface SkillCategoryRepo extends JpaRepository<SkillEntities.SkillCategory, String> {}
-    public interface SkillRepo extends JpaRepository<SkillEntities.Skill, String> {}
+    public interface SkillCategoryRepo extends JpaRepository<SkillEntities.SkillCategory, String> {
+        List<SkillEntities.SkillCategory> findByOrgId(String orgId);
+    }
+    public interface SkillRepo extends JpaRepository<SkillEntities.Skill, String> {
+        List<SkillEntities.Skill> findByOrgId(String orgId);
+    }
     public interface CourseSkillRepo extends JpaRepository<SkillEntities.CourseSkill, String> {
         List<SkillEntities.CourseSkill> findByCourseId(String courseId);
         List<SkillEntities.CourseSkill> findBySkillId(String skillId);
@@ -171,7 +205,9 @@ public class Repos {
         List<SkillEntities.SkillAssessment> findByUserId(String userId);
         Optional<SkillEntities.SkillAssessment> findFirstByUserIdAndSkillIdAndLessonIdAndKind(String userId, String skillId, String lessonId, String kind);
     }
-    public interface LearningPathRepo extends JpaRepository<SkillEntities.LearningPath, String> {}
+    public interface LearningPathRepo extends JpaRepository<SkillEntities.LearningPath, String> {
+        List<SkillEntities.LearningPath> findByOrgId(String orgId);
+    }
     public interface LearningPathNodeRepo extends JpaRepository<SkillEntities.LearningPathNode, String> {
         List<SkillEntities.LearningPathNode> findByPathIdOrderByPositionAsc(String pathId);
     }

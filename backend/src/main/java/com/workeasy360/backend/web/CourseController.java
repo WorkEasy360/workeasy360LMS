@@ -23,7 +23,7 @@ public class CourseController {
     }
 
     @GetMapping("/catalog")
-    public List<CourseSummaryDto> catalog() { return service.catalog(); }
+    public List<CourseSummaryDto> catalog(@AuthenticationPrincipal CurrentUser user) { return service.catalog(user); }
 
     /** Every course tree in the caller's scope in one response (post-login hydration). */
     @GetMapping("/trees")

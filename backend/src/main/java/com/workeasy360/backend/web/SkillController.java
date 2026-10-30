@@ -18,16 +18,16 @@ public class SkillController {
 
     // ---- library (everyone can read; admin writes) ----
     @GetMapping("/api/skills")
-    public List<SkillDto> list(@RequestParam(defaultValue = "false") boolean includeInactive) { return service.listSkills(includeInactive); }
+    public List<SkillDto> list(@AuthenticationPrincipal CurrentUser user, @RequestParam(defaultValue = "false") boolean includeInactive) { return service.listSkills(user.getOrgId(), includeInactive); }
     @PostMapping("/api/skills")
     public SkillDto create(@AuthenticationPrincipal CurrentUser user, @RequestBody UpsertSkillRequest req) {
         Skill s = service.upsertSkill(user, req);
-        return service.listSkills(true).stream().filter(x -> x.id().equals(s.getId())).findFirst().orElseThrow();
+        return service.listSkills(user.getOrgId(), true).stream().filter(x -> x.id().equals(s.getId())).findFirst().orElseThrow();
     }
     @PutMapping("/api/skills/{id}")
     public SkillDto update(@AuthenticationPrincipal CurrentUser user, @PathVariable String id, @RequestBody UpsertSkillRequest req) {
         Skill s = service.upsertSkill(user, new UpsertSkillRequest(id, req.name(), req.description(), req.categoryId(), req.icon(), req.levels(), req.active()));
-        return service.listSkills(true).stream().filter(x -> x.id().equals(s.getId())).findFirst().orElseThrow();
+        return service.listSkills(user.getOrgId(), true).stream().filter(x -> x.id().equals(s.getId())).findFirst().orElseThrow();
     }
     @PostMapping("/api/skills/{id}/deactivate")
     public void deactivate(@AuthenticationPrincipal CurrentUser user, @PathVariable String id) { service.setActive(user, id, false); }
@@ -35,7 +35,7 @@ public class SkillController {
     public void activate(@AuthenticationPrincipal CurrentUser user, @PathVariable String id) { service.setActive(user, id, true); }
 
     @GetMapping("/api/skills/categories")
-    public List<CategoryDto> categories() { return service.listCategories(); }
+    public List<CategoryDto> categories(@AuthenticationPrincipal CurrentUser user) { return service.listCategories(user.getOrgId()); }
     @PostMapping("/api/skills/categories")
     public CategoryDto createCategory(@AuthenticationPrincipal CurrentUser user, @RequestBody UpsertCategoryRequest req) { return CategoryDto.of(service.upsertCategory(user, req)); }
 
@@ -63,5 +63,5 @@ public class SkillController {
 
     // ---- learning paths ----
     @GetMapping("/api/learning-paths")
-    public List<LearningPathDto> paths() { return service.learningPaths(); }
+    public List<LearningPathDto> paths(@AuthenticationPrincipal CurrentUser user) { return service.learningPaths(user.getOrgId()); }
 }

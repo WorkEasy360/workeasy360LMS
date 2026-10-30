@@ -31,10 +31,14 @@ public class UserController {
     private final com.workeasy360.backend.service.MailService mail;
     private final com.workeasy360.backend.service.UserDeleteService deleter;
     private final com.workeasy360.backend.service.SyncService sync;
+    private final com.workeasy360.backend.service.AuditService audit;
+    private final com.workeasy360.backend.service.EntitlementService entitlements;
     public UserController(UserRepo users, PermissionService perm, PasswordEncoder encoder,
                           com.workeasy360.backend.service.PasswordResetService passwordResets, com.workeasy360.backend.service.MailService mail,
-                          com.workeasy360.backend.service.UserDeleteService deleter, com.workeasy360.backend.service.SyncService sync) {
+                          com.workeasy360.backend.service.UserDeleteService deleter, com.workeasy360.backend.service.SyncService sync,
+                          com.workeasy360.backend.service.AuditService audit, com.workeasy360.backend.service.EntitlementService entitlements) {
         this.users = users; this.perm = perm; this.encoder = encoder; this.passwordResets = passwordResets; this.mail = mail; this.deleter = deleter; this.sync = sync;
+        this.audit = audit; this.entitlements = entitlements;
     }
 
     private UserDto view(CurrentUser me, User u) {
@@ -43,15 +47,22 @@ public class UserController {
         return full ? d : new UserDto(d.id(), d.name(), null, d.role(), d.title(), d.dept(), d.hue(), d.streak(), d.status());
     }
 
+    /** Tenant boundary: a person from another organization does not exist for this caller. */
+    private User inMyOrg(CurrentUser me, String id) {
+        User u = users.findById(id).orElseThrow(() -> ApiException.notFound("User"));
+        if (u.getOrgId() != null && !u.getOrgId().equals(me.getOrgId())) throw ApiException.notFound("User");
+        return u;
+    }
+
     @GetMapping
     public List<UserDto> list(@AuthenticationPrincipal CurrentUser me, @RequestParam(required = false) String role) {
-        List<User> all = role == null ? users.findAll() : users.findByRole(Role.valueOf(role.toUpperCase()));
+        List<User> all = role == null ? users.findByOrgId(me.getOrgId()) : users.findByOrgIdAndRole(me.getOrgId(), Role.valueOf(role.toUpperCase()));
         return all.stream().map(u -> view(me, u)).toList();
     }
 
     @GetMapping("/{id}")
     public UserDto get(@AuthenticationPrincipal CurrentUser me, @PathVariable String id) {
-        return view(me, users.findById(id).orElseThrow(() -> ApiException.notFound("User")));
+        return view(me, inMyOrg(me, id));
     }
 
     @PostMapping
@@ -62,21 +73,24 @@ public class UserController {
         if (!email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) throw ApiException.badRequest("Enter a valid e-mail address");
         if (users.findByEmailIgnoreCase(email).isPresent()) throw ApiException.conflict("Someone with that e-mail already exists");
         Role role = parseRole(req.role());
+        entitlements.requireUserCapacity(me.getOrgId()); // subscription plan seat limit
         String password = req.password() != null && req.password().length() >= 8 ? req.password() : temporaryPassword();
-        User u = User.builder().name(name).email(email).role(role).passwordHash(encoder.encode(password))
+        User u = User.builder().name(name).email(email).role(role).passwordHash(encoder.encode(password)).orgId(me.getOrgId())
                 .title(cut(req.title(), 160, "Team member")).dept(cut(req.dept(), 120, "Unassigned")).hue((int) (Math.abs(email.hashCode()) % 360)).status("ACTIVE").streak(0)
                 .createdAt(Instant.now()).updatedAt(Instant.now()).build();
         users.save(u);
+        audit.record(me.getId(), me.getOrgId(), "user.create", u.getEmail() + " as " + role);
         return new CreatedUser(UserDto.of(u), req.password() != null && req.password().length() >= 8 ? null : password); // shown once, never stored in clear
     }
 
     @PutMapping("/{id}")
     public UserDto update(@AuthenticationPrincipal CurrentUser me, @PathVariable String id, @RequestBody UpdateUserRequest req) {
         if (!perm.isAdmin(me)) throw ApiException.forbidden("Only an admin can change people");
-        User u = users.findById(id).orElseThrow(() -> ApiException.notFound("User"));
+        User u = inMyOrg(me, id);
         if (req.role() != null) {
             Role r = parseRole(req.role());
             if (u.getId().equals(me.getId()) && r != Role.ADMIN) throw ApiException.badRequest("You can't remove your own admin role");
+            if (r != u.getRole()) audit.record(me.getId(), me.getOrgId(), "user.role", u.getEmail() + ": " + u.getRole() + " -> " + r);
             u.setRole(r);
         }
         if (req.name() != null && req.name().trim().length() >= 2) u.setName(req.name().trim());
@@ -94,8 +108,10 @@ public class UserController {
     @DeleteMapping("/{id}")
     public Map<String, Object> delete(@AuthenticationPrincipal CurrentUser me, @PathVariable String id) {
         if (!perm.isAdmin(me)) throw ApiException.forbidden("Only an admin can delete people");
+        User target = inMyOrg(me, id);
         deleter.delete(me.getId(), id);
         sync.disconnectUser(id);
+        audit.record(me.getId(), me.getOrgId(), "user.delete", target.getEmail());
         return Map.of("ok", true);
     }
 
@@ -106,7 +122,7 @@ public class UserController {
     @PostMapping("/{id}/reset-token")
     public ResetToken resetToken(@AuthenticationPrincipal CurrentUser me, @PathVariable String id) {
         if (!perm.isAdmin(me)) throw ApiException.forbidden("Only an admin can issue a password reset");
-        User u = users.findById(id).orElseThrow(() -> ApiException.notFound("User"));
+        User u = inMyOrg(me, id);
         String token = passwordResets.issue(u.getId(), me.getId());
         String path = "#/reset/" + token;
         boolean emailed = mail.enabled();

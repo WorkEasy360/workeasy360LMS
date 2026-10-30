@@ -33,8 +33,14 @@ public class NotificationService {
         this.users = users; this.mail = mail; this.sync = sync;
     }
 
-    public boolean ruleEnabled(String rule) {
-        Settings s = settingsRepo.findById("singleton").orElse(null);
+    /** Automation rules are per organization; the rule is checked against the recipient's (or actor's) org settings. */
+    public boolean ruleEnabled(String rule) { return ruleEnabledForOrg(com.workeasy360.backend.domain.Organization.DEFAULT, rule); }
+    public boolean ruleEnabledFor(String userId, String rule) {
+        String org = users.findById(userId).map(User::getOrgId).orElse(com.workeasy360.backend.domain.Organization.DEFAULT);
+        return ruleEnabledForOrg(org, rule);
+    }
+    public boolean ruleEnabledForOrg(String orgId, String rule) {
+        Settings s = settingsRepo.findByOrgId(orgId == null ? com.workeasy360.backend.domain.Organization.DEFAULT : orgId).orElse(null);
         if (s == null || s.getAutomationJson() == null) return true;
         JsonNode n = Json.read(s.getAutomationJson());
         return !n.has(rule) || n.path(rule).asBoolean(true);
@@ -50,11 +56,12 @@ public class NotificationService {
         }
         Notification saved = notifications.save(Notification.builder().userId(userId).kind(kind).title(cut(title, 300)).body(cut(body, 1000)).href(cut(href, 300)).read(false).at(Instant.now()).build());
         // Push the bell update to the recipient's open sessions (delivered only after this transaction commits).
-        sync.publish(com.workeasy360.backend.security.CurrentUser.DEFAULT_ORG, "notifications", SyncService.Audience.USER, null, userId);
+        String recipientOrg = users.findById(userId).map(User::getOrgId).orElse(com.workeasy360.backend.domain.Organization.DEFAULT);
+        sync.publish(recipientOrg, "notifications", SyncService.Audience.USER, null, userId);
         // Mirror genuinely new notifications (the dedupe above already returned repeats) to e-mail when SMTP is
         // configured. Governed by the same admin automation rules that created the notification in the first place.
         if (mail.enabled()) {
-            String orgName = settingsRepo.findById("singleton").map(Settings::getOrgName).orElse("WorkEasyLMS");
+            String orgName = users.findById(userId).map(User::getOrgId).flatMap(settingsRepo::findByOrgId).map(Settings::getOrgName).orElse("WorkEasyLMS");
             String base = mail.publicUrl();
             users.findById(userId).ifPresent(u -> mail.send(u.getEmail(), saved.getTitle(),
                     "Hi " + u.getName() + ",\n\n" + (saved.getBody() == null || saved.getBody().isBlank() ? saved.getTitle() : saved.getBody())
@@ -81,7 +88,7 @@ public class NotificationService {
     /** Login-time reminders: due / overdue courses (once a day) and expiring certificates (once a week). */
     public void reminders(String userId) {
         Instant now = Instant.now();
-        if (ruleEnabled("dueReminders")) for (Enrollment e : enrollments.findByUserId(userId)) {
+        if (ruleEnabledFor(userId, "dueReminders")) for (Enrollment e : enrollments.findByUserId(userId)) {
             if (e.getDueAt() == null || e.getStatus() == EnrollmentStatus.COMPLETED || e.getCompletedAt() != null) continue;
             Course c = courses.findById(e.getCourseId()).orElse(null); if (c == null) continue;
             long days = Duration.between(now, e.getDueAt()).toDays();
@@ -89,7 +96,7 @@ public class NotificationService {
             if (e.getDueAt().isBefore(now)) notify(userId, "due", c.getTitle() + " is overdue", "It was due on " + e.getDueAt().toString().substring(0, 10) + " — pick up where you left off.", href, Duration.ofHours(24));
             else if (days <= 3) notify(userId, "due", c.getTitle() + " is due " + (days == 0 ? "today" : "in " + days + " day" + (days == 1 ? "" : "s")), "Finish the remaining lessons to stay on track.", href, Duration.ofHours(24));
         }
-        if (ruleEnabled("certificateExpiry")) for (Certificate cert : certificates.findByUserId(userId)) {
+        if (ruleEnabledFor(userId, "certificateExpiry")) for (Certificate cert : certificates.findByUserId(userId)) {
             if (Boolean.TRUE.equals(cert.getRevoked()) || cert.getExpiresAt() == null) continue;
             Course c = courses.findById(cert.getCourseId()).orElse(null); if (c == null) continue;
             if (cert.getExpiresAt().isBefore(now)) notify(userId, "expiry", "Your " + c.getTitle() + " certificate has expired", "Review the course and renew it from Certificates.", "/certificates", Duration.ofDays(7));

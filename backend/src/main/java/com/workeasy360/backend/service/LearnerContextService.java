@@ -55,7 +55,7 @@ public class LearnerContextService {
         List<Enrollment> ens = enrollments.findByUserId(uid);
         Set<String> courseIds = ens.stream().map(Enrollment::getCourseId).collect(Collectors.toCollection(LinkedHashSet::new));
         Map<String, Course> courseById = new HashMap<>();
-        courses.findAll().forEach(c -> courseById.put(c.getId(), c));
+        courses.findByOrgId(user.getOrgId()).forEach(c -> courseById.put(c.getId(), c)); // the coach only ever sees this tenant's catalogue
         // lessons of enrolled + published courses, one query per table
         Set<String> published = courseById.values().stream().filter(c -> c.getStatus() == CourseStatus.PUBLISHED && c.getVisibility() == CourseVisibility.CATALOG).map(Course::getId).collect(Collectors.toSet());
         Set<String> accessible = new LinkedHashSet<>(courseIds); accessible.addAll(published);
@@ -89,13 +89,13 @@ public class LearnerContextService {
         if (states.size() > MAX_COURSES) states = states.subList(0, MAX_COURSES);
 
         Map<String, String> skillNames = new HashMap<>();
-        skills.findAll().forEach(s -> skillNames.put(s.getId(), s.getName()));
+        skills.findByOrgId(user.getOrgId()).forEach(s -> skillNames.put(s.getId(), s.getName()));
         List<SkillState> skillStates = skillService.userSkills(uid).stream().map(s -> new SkillState(s.skillId(), skillNames.getOrDefault(s.skillId(), s.skillId()), s.currentLevel(), s.levelLabel(), s.progressPercentage(), s.targetLevel(),
                 SkillService.LEVEL_LABELS[Math.max(1, Math.min(4, s.targetLevel()))], Math.max(0, levelPct(s.targetLevel()) - s.progressPercentage()), s.courseIds())).sorted(Comparator.comparingInt(SkillState::gapPct).reversed()).limit(MAX_SKILLS).toList();
 
         Map<String, Integer> pctByCourse = states.stream().collect(Collectors.toMap(CourseState::courseId, CourseState::pct, (a, b) -> a));
         List<JourneyState> journeys = new ArrayList<>();
-        for (LearningPathDto p : skillService.learningPaths()) {
+        for (LearningPathDto p : skillService.learningPaths(user.getOrgId())) {
             List<String> ids = p.nodes().stream().filter(n -> "course".equals(n.type()) && n.courseId() != null).map(LearningPathNodeDto::courseId).toList();
             if (ids.isEmpty()) continue;
             int pct = Math.round((float) ids.stream().mapToInt(id -> pctByCourse.getOrDefault(id, 0)).sum() / ids.size());

@@ -84,19 +84,20 @@ public class SkillService {
     }
 
     // ---------- library ----------
-    public List<SkillDto> listSkills(boolean includeInactive) {
+    public List<SkillDto> listSkills(String orgId, boolean includeInactive) {
         Map<String, String> catNames = new HashMap<>();
-        categories.findAll().forEach(c -> catNames.put(c.getId(), c.getName()));
-        return skills.findAll().stream().filter(s -> includeInactive || s.getActive())
+        categories.findByOrgId(orgId).forEach(c -> catNames.put(c.getId(), c.getName()));
+        return skills.findByOrgId(orgId).stream().filter(s -> includeInactive || s.getActive())
                 .sorted(Comparator.comparing(Skill::getName))
                 .map(s -> new SkillDto(s.getId(), s.getName(), s.getDescription(), s.getCategoryId(), catNames.getOrDefault(s.getCategoryId(), "General"), s.getIcon(), SkillDtos.levelsOf(s), s.getActive()))
                 .toList();
     }
-    public List<CategoryDto> listCategories() { return categories.findAll().stream().sorted(Comparator.comparing(SkillCategory::getPosition)).map(CategoryDto::of).toList(); }
+    public List<CategoryDto> listCategories(String orgId) { return categories.findByOrgId(orgId).stream().sorted(Comparator.comparing(SkillCategory::getPosition)).map(CategoryDto::of).toList(); }
 
     public Skill upsertSkill(CurrentUser user, UpsertSkillRequest req) {
         if (!perm.isAdmin(user)) throw ApiException.forbidden("Only an admin can manage the skills library");
-        Skill s = req.id() != null ? skills.findById(req.id()).orElseGet(() -> Skill.builder().id(req.id()).build()) : Skill.builder().build();
+        Skill s = req.id() != null ? skills.findById(req.id()).orElseGet(() -> Skill.builder().id(req.id()).orgId(user.getOrgId()).build()) : Skill.builder().orgId(user.getOrgId()).build();
+        if (s.getOrgId() != null && !s.getOrgId().equals(user.getOrgId())) throw ApiException.notFound("Skill"); // tenant boundary
         if (req.name() != null) s.setName(req.name());
         if (s.getName() == null || s.getName().isBlank()) throw ApiException.badRequest("A skill needs a name");
         if (req.description() != null) s.setDescription(req.description());
@@ -110,11 +111,13 @@ public class SkillService {
     public void setActive(CurrentUser user, String id, boolean active) {
         if (!perm.isAdmin(user)) throw ApiException.forbidden("Only an admin can manage the skills library");
         Skill s = skills.findById(id).orElseThrow(() -> ApiException.notFound("Skill"));
+        if (s.getOrgId() != null && !s.getOrgId().equals(user.getOrgId())) throw ApiException.notFound("Skill");
         s.setActive(active); skills.save(s);
     }
     public SkillCategory upsertCategory(CurrentUser user, UpsertCategoryRequest req) {
         if (!perm.isAdmin(user)) throw ApiException.forbidden("Only an admin can manage skill categories");
-        SkillCategory c = req.id() != null ? categories.findById(req.id()).orElseGet(() -> SkillCategory.builder().id(req.id()).build()) : SkillCategory.builder().build();
+        SkillCategory c = req.id() != null ? categories.findById(req.id()).orElseGet(() -> SkillCategory.builder().id(req.id()).orgId(user.getOrgId()).build()) : SkillCategory.builder().orgId(user.getOrgId()).build();
+        if (c.getOrgId() != null && !c.getOrgId().equals(user.getOrgId())) throw ApiException.notFound("Category");
         if (req.name() != null) c.setName(req.name());
         if (req.description() != null) c.setDescription(req.description());
         if (req.position() != null) c.setPosition(req.position());
@@ -327,8 +330,8 @@ public class SkillService {
     }
 
     // ---------- learning paths ----------
-    public List<LearningPathDto> learningPaths() {
-        return paths.findAll().stream().filter(LearningPath::getActive).map(p -> new LearningPathDto(p.getId(), p.getTitle(), p.getDescription(),
+    public List<LearningPathDto> learningPaths(String orgId) {
+        return paths.findByOrgId(orgId).stream().filter(LearningPath::getActive).map(p -> new LearningPathDto(p.getId(), p.getTitle(), p.getDescription(),
                 pathNodes.findByPathIdOrderByPositionAsc(p.getId()).stream().map(n -> {
                     List<String> req = new ArrayList<>();
                     JsonNode r = Json.read(n.getRequiresJson()); if (r.isArray()) r.forEach(x -> req.add(x.asText()));

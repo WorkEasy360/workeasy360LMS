@@ -32,9 +32,12 @@ public class User {
     @Column(nullable = false)
     private Integer streak;
 
+    @Column(name = "org_id", nullable = false, length = 40)
+    private String orgId;
+
     @Column(name = "created_at", nullable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
 
-    @PrePersist void prePersist() { if (id == null) id = Ids.next("u"); createdAt = updatedAt = Instant.now(); if (status == null) status = "ACTIVE"; if (streak == null) streak = 0; }
+    @PrePersist void prePersist() { if (id == null) id = Ids.next("u"); createdAt = updatedAt = Instant.now(); if (status == null) status = "ACTIVE"; if (streak == null) streak = 0; if (orgId == null) orgId = Organization.DEFAULT; }
     @PreUpdate void preUpdate() { updatedAt = Instant.now(); }
 }

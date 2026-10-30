@@ -2,7 +2,8 @@ package com.workeasy360.backend.domain;
 
 // All enums are STRING-mapped in the DB (see V1__init.sql) so values stay readable and portable.
 public class Enums {
-    public enum Role { ADMIN, INSTRUCTOR, LEARNER }
+    /** PLATFORM is WorkEasy360's own staff (the product owner): platform-wide oversight, never a member of any customer organization. */
+    public enum Role { ADMIN, INSTRUCTOR, LEARNER, PLATFORM }
 
     public enum CourseStatus { DRAFT, IN_REVIEW, PUBLISHED, ARCHIVED }
     public enum CourseVisibility { CATALOG, ASSIGNED }

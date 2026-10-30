@@ -62,8 +62,14 @@ public class AnalyticsService {
                                  long aiGenerations, Map<String, Long> aiByType, Map<String, Long> aiByStatus) {}
     public CoachAnalytics coach(CurrentUser u) {
         if (!perm.isAdmin(u)) throw ApiException.forbidden("Coach analytics are available to administrators");
-        var convs = coachConversations.findAll(); var msgs = coachMessages.findAll(); var plans = learningPlans.findAll();
-        var recs = recommendations.findAll(); var fb = recommendationFeedback.findAll(); var gens = aiGenerations.findAll();
+        java.util.Set<String> orgUsers = users.findByOrgId(u.getOrgId()).stream().map(User::getId).collect(Collectors.toSet());
+        var convs = coachConversations.findAll().stream().filter(c -> orgUsers.contains(c.getUserId())).toList();
+        java.util.Set<String> convIds = convs.stream().map(c -> c.getId()).collect(Collectors.toSet());
+        var msgs = coachMessages.findAll().stream().filter(m -> convIds.contains(m.getConversationId())).toList();
+        var plans = learningPlans.findAll().stream().filter(p -> orgUsers.contains(p.getUserId())).toList();
+        var recs = recommendations.findAll().stream().filter(r -> orgUsers.contains(r.getUserId())).toList();
+        var fb = recommendationFeedback.findAll().stream().filter(f -> orgUsers.contains(f.getUserId())).toList();
+        var gens = aiGenerations.findAll().stream().filter(g -> orgUsers.contains(g.getUserId())).toList();
         Function<java.util.stream.Stream<String>, Map<String, Long>> count = s -> s.collect(Collectors.groupingBy(x -> x, TreeMap::new, Collectors.counting()));
         return new CoachAnalytics(convs.size(), msgs.size(), msgs.stream().filter(m -> "user".equalsIgnoreCase(m.getRole())).count(),
                 convs.stream().map(c -> c.getUserId()).distinct().count(),
@@ -84,7 +90,7 @@ public class AnalyticsService {
             if (!perm.canViewAnalytics(u, c)) throw ApiException.forbidden("You can only view analytics for courses you manage");
             return new Scope(List.of(c), false);
         }
-        List<Course> all = courses.findAll().stream().filter(c -> perm.isAdmin(u) || perm.canEditCourse(u, c)).toList();
+        List<Course> all = courses.findByOrgId(u.getOrgId()).stream().filter(c -> perm.isAdmin(u) || perm.canEditCourse(u, c)).toList();
         return new Scope(all, perm.isAdmin(u));
     }
 
@@ -203,7 +209,7 @@ public class AnalyticsService {
         Map<String, Set<String>> completed = d.completedByKey();
         Instant activeSince = f.from() != null ? f.from() : Instant.now().minusSeconds(7 * DAY);
         Set<String> enrolledUsers = d.enrollments.stream().map(Enrollment::getUserId).collect(Collectors.toSet());
-        int totalLearners = s.org() ? users.findByRole(Role.LEARNER).size() : enrolledUsers.size();
+        int totalLearners = s.org() ? users.findByOrgIdAndRole(u.getOrgId(), Role.LEARNER).size() : enrolledUsers.size();
         int active = (int) d.enrollments.stream().filter(e -> e.getLastActiveAt() != null && !e.getLastActiveAt().isBefore(activeSince) && (f.to() == null || !e.getLastActiveAt().isAfter(f.to()))).map(Enrollment::getUserId).distinct().count();
         int completions = (int) d.enrollments.stream().filter(e -> e.getCompletedAt() != null && (!hasRange(f) || inRange(e.getCompletedAt(), f))).count();
         long lessonSlots = d.enrollments.stream().mapToLong(e -> d.lessonCount(e.getCourseId())).sum();
@@ -213,7 +219,7 @@ public class AnalyticsService {
         int reviewed = (int) d.subs.stream().filter(x -> x.getStatus() == SubmissionStatus.REVIEWED).count();
         int expiring = (int) d.certs.stream().filter(c -> certStatus(c).equals("EXPIRING")).count();
         int expired = (int) d.certs.stream().filter(c -> certStatus(c).equals("EXPIRED")).count();
-        List<UserSkill> skillRows = s.org() ? userSkills.findAll() : enrolledUsers.isEmpty() ? List.of() : userSkills.findByUserIdIn(enrolledUsers);
+        List<UserSkill> skillRows = s.org() ? userSkills.findByUserIdIn(users.findByOrgId(u.getOrgId()).stream().map(User::getId).toList()) : enrolledUsers.isEmpty() ? List.of() : userSkills.findByUserIdIn(enrolledUsers);
         if (!s.org()) { Set<String> mapped = courseSkills.findAll().stream().filter(cs -> d.courseById.containsKey(cs.getCourseId())).map(CourseSkill::getSkillId).collect(Collectors.toSet()); skillRows = skillRows.stream().filter(r -> mapped.contains(r.getSkillId())).toList(); }
         return new Overview(s.org() ? "organisation" : f.courseId() != null ? "course" : "my-courses",
                 (int) s.courses().stream().filter(c -> c.getStatus() == CourseStatus.PUBLISHED).count(), s.courses().size(),
@@ -281,16 +287,17 @@ public class AnalyticsService {
         Data d = new Data(s, f, false);
         Map<String, Set<String>> completed = d.completedByKey();
         Set<String> ids = d.enrollments.stream().map(Enrollment::getUserId).collect(Collectors.toCollection(LinkedHashSet::new));
-        List<User> people = s.org() && f.courseId() == null && !hasRange(f) ? users.findByRole(Role.LEARNER) : users.findAllById(ids);
+        List<User> people = s.org() && f.courseId() == null && !hasRange(f) ? users.findByOrgIdAndRole(u.getOrgId(), Role.LEARNER) : users.findAllById(ids);
         return people.stream().filter(p -> p.getRole() == Role.LEARNER).map(p -> learnerAnalytics(d, p, completed, false)).sorted(Comparator.comparing(LearnerAnalytics::name)).toList();
     }
 
     public LearnerAnalytics learner(CurrentUser u, String userId, Filters f) {
         User target = users.findById(userId).orElseThrow(() -> ApiException.notFound("User"));
+        if (target.getOrgId() != null && !target.getOrgId().equals(u.getOrgId())) throw ApiException.notFound("User"); // tenant boundary
         Scope s;
-        if (u.getId().equals(userId) || perm.isAdmin(u)) s = new Scope(courses.findAll(), true);
+        if (u.getId().equals(userId) || perm.isAdmin(u)) s = new Scope(courses.findByOrgId(u.getOrgId()), true);
         else if (u.getRole() == Role.INSTRUCTOR) {
-            List<Course> mine = courses.findAll().stream().filter(c -> perm.canEditCourse(u, c)).toList();
+            List<Course> mine = courses.findByOrgId(u.getOrgId()).stream().filter(c -> perm.canEditCourse(u, c)).toList();
             boolean enrolledWithMe = enrollments.findByUserId(userId).stream().anyMatch(e -> mine.stream().anyMatch(c -> c.getId().equals(e.getCourseId())));
             if (!enrolledWithMe) throw ApiException.forbidden("This learner is not enrolled in any course you manage");
             s = new Scope(mine, false); // only the instructor's own courses are ever disclosed
@@ -358,15 +365,15 @@ public class AnalyticsService {
 
     // ---------------------------------------------------------------- skills
     public List<SkillAnalytics> skills(CurrentUser u, Filters f) {
-        Map<String, String> catNames = categories.findAll().stream().collect(Collectors.toMap(SkillCategory::getId, SkillCategory::getName));
-        List<Skill> lib = skills.findAll().stream().filter(Skill::getActive).toList();
+        Map<String, String> catNames = categories.findByOrgId(u.getOrgId()).stream().collect(Collectors.toMap(SkillCategory::getId, SkillCategory::getName));
+        List<Skill> lib = skills.findByOrgId(u.getOrgId()).stream().filter(Skill::getActive).toList();
         List<UserSkill> rows;
         Set<String> allowedSkills;
         Map<String, Long> coursesPerSkill = courseSkills.findAll().stream().collect(Collectors.groupingBy(CourseSkill::getSkillId, Collectors.counting()));
         if (u.getRole() == Role.LEARNER) { rows = userSkills.findByUserId(u.getId()); allowedSkills = rows.stream().map(UserSkill::getSkillId).collect(Collectors.toSet()); }
         else {
             Scope s = scope(u, f.courseId());
-            if (s.org()) { rows = userSkills.findAll(); allowedSkills = lib.stream().map(Skill::getId).collect(Collectors.toSet()); }
+            if (s.org()) { rows = userSkills.findByUserIdIn(users.findByOrgId(u.getOrgId()).stream().map(User::getId).toList()); allowedSkills = lib.stream().map(Skill::getId).collect(Collectors.toSet()); }
             else {
                 Set<String> ids = s.ids();
                 Set<String> learnerIds = (ids.isEmpty() ? List.<Enrollment>of() : enrollments.findByCourseIdIn(ids)).stream().map(Enrollment::getUserId).collect(Collectors.toSet());
@@ -388,7 +395,7 @@ public class AnalyticsService {
     // ---------------------------------------------------------------- activity
     public List<DayPoint> activity(CurrentUser u, Filters f) {
         if (u.getRole() == Role.LEARNER || (f.userId() != null && f.userId().equals(u.getId()))) {
-            Data d = new Data(new Scope(courses.findAll(), true), new Filters(f.from(), f.to(), f.courseId(), u.getId(), null, null), false);
+            Data d = new Data(new Scope(courses.findByOrgId(u.getOrgId()), true), new Filters(f.from(), f.to(), f.courseId(), u.getId(), null, null), false);
             return series(d, f);
         }
         if (f.userId() != null) learner(u, f.userId(), f); // authorisation check for someone else's data
@@ -400,7 +407,7 @@ public class AnalyticsService {
     public MyProgress me(CurrentUser u) {
         User p = users.findById(u.getId()).orElseThrow(() -> ApiException.notFound("User"));
         Filters none = new Filters(null, null, null, u.getId(), null, null);
-        Data d = new Data(new Scope(courses.findAll(), true), none, true);
+        Data d = new Data(new Scope(courses.findByOrgId(u.getOrgId()), true), none, true);
         Map<String, Set<String>> completed = d.completedByKey();
         LearnerAnalytics la = learnerAnalytics(d, p, completed, true);
         // streak: consecutive UTC days (ending today or yesterday) with at least one recorded learning event
@@ -439,7 +446,8 @@ public class AnalyticsService {
     // ---------------------------------------------------------------- guide adoption (admin: organisation-wide)
     public List<GuideAnalytics> guides(CurrentUser u) {
         if (!perm.isAdmin(u)) throw ApiException.forbidden("Guide adoption analytics are available to administrators");
-        Map<String, List<GuideAnalyticsEvent>> byGuide = guideEvents.findAll().stream().collect(Collectors.groupingBy(GuideAnalyticsEvent::getGuideId, TreeMap::new, Collectors.toList()));
+        java.util.Set<String> guideOrgUsers = users.findByOrgId(u.getOrgId()).stream().map(User::getId).collect(Collectors.toSet());
+        Map<String, List<GuideAnalyticsEvent>> byGuide = guideEvents.findAll().stream().filter(e -> e.getUserId() == null || guideOrgUsers.contains(e.getUserId())).collect(Collectors.groupingBy(GuideAnalyticsEvent::getGuideId, TreeMap::new, Collectors.toList()));
         List<GuideAnalytics> out = new ArrayList<>();
         byGuide.forEach((guideId, evs) -> {
             java.util.function.ToIntFunction<String> count = name -> (int) evs.stream().filter(e -> name.equals(e.getEvent())).count();

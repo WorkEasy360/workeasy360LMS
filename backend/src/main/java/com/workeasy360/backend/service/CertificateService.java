@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +42,10 @@ public class CertificateService {
     }
 
     public List<Certificate> forUser(String userId) { return certificates.findByUserId(userId); }
-    public List<Certificate> all() { return certificates.findAll(); }
+    public List<Certificate> allForOrg(String orgId) {
+        Set<String> orgCourses = courses.findByOrgId(orgId).stream().map(Course::getId).collect(Collectors.toSet());
+        return certificates.findAll().stream().filter(c -> orgCourses.contains(c.getCourseId())).toList();
+    }
 
     /** Certificates with recipient, course, instructor and issuing organisation resolved in bulk (one query per table). */
     @Transactional(readOnly = true)
@@ -52,11 +56,15 @@ public class CertificateService {
         list.forEach(c -> userIds.add(c.getUserId()));
         courseById.values().forEach(c -> userIds.add(c.getInstructorId()));
         Map<String, String> names = users.findAllById(userIds).stream().collect(Collectors.toMap(User::getId, User::getName));
-        Settings org = settings.findById("singleton").orElse(null);
-        String issuer = org == null ? null : org.getOrgName();
-        String issuerLogo = org == null ? null : org.getOrgLogo();
+        // The issuing organisation is the course's organisation: its name and logo appear on the certificate.
+        Map<String, Settings> settingsByOrg = new HashMap<>();
+        courseById.values().stream().map(Course::getOrgId).filter(java.util.Objects::nonNull).distinct()
+                .forEach(orgId -> settings.findByOrgId(orgId).ifPresent(s -> settingsByOrg.put(orgId, s)));
         return list.stream().map(c -> {
             Course course = courseById.get(c.getCourseId());
+            Settings org = course == null ? null : settingsByOrg.get(course.getOrgId());
+            String issuer = org == null ? null : org.getOrgName();
+            String issuerLogo = org == null ? null : org.getOrgLogo();
             return CertificateDto.of(c, status(c).name(), names.get(c.getUserId()), course == null ? null : course.getTitle(),
                     course == null ? null : names.get(course.getInstructorId()), issuer, issuerLogo);
         }).toList();

@@ -53,7 +53,7 @@ public class VideoService {
         boolean extOk = ALLOWED_EXT.stream().anyMatch(name::endsWith);
         boolean mimeOk = ALLOWED_MIME.contains(file.getContentType());
         if (!extOk && !mimeOk) throw ApiException.badRequest("That file type isn't supported. Use MP4, WebM or MOV.");
-        long maxBytes = (long) settingsRepo.findById("singleton").map(Settings::getMaxVideoMb).orElse(200) * 1024 * 1024;
+        long maxBytes = (long) settingsRepo.findByOrgId(user.getOrgId()).map(Settings::getMaxVideoMb).orElse(200) * 1024 * 1024;
         if (file.getSize() > maxBytes) throw ApiException.badRequest("That file is too large. The maximum is " + (maxBytes / 1024 / 1024) + " MB.");
         if (file.getSize() == 0) throw ApiException.badRequest("That file is empty.");
 

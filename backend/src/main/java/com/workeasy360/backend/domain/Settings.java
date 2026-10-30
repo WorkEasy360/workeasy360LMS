@@ -17,4 +17,7 @@ public class Settings {
     @Column(name = "instructor_publish", nullable = false) private Boolean instructorPublish;
     @Column(name = "automation_json") private String automationJson; // {enrolmentNotifications, dueReminders, certificateExpiry, reviewNotifications, discussionReplies}
     @Column(name = "org_logo") private String orgLogo; // small data: image printed on certificates as the issuer's logo; null = name only
+    @Column(name = "org_id", nullable = false, length = 40) private String orgId; // one settings row per organization
+
+    @PrePersist void prePersist() { if (orgId == null) orgId = Organization.DEFAULT; }
 }

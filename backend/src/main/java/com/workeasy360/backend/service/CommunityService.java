@@ -27,8 +27,8 @@ public class CommunityService {
         this.posts = posts; this.comments = comments; this.reactions = reactions; this.groups = groups; this.groupMembers = groupMembers; this.notifications = notifications; this.users = users; this.courses = courses; this.lessons = lessons;
     }
 
-    public List<Post> list(String groupId, String courseId, String lessonId, String kind) {
-        List<Post> all = posts.findAll();
+    public List<Post> list(String orgId, String groupId, String courseId, String lessonId, String kind) {
+        List<Post> all = posts.findByOrgId(orgId);
         return all.stream()
                 .filter(p -> groupId == null || groupId.equals(p.getGroupId()))
                 .filter(p -> courseId == null || courseId.equals(p.getCourseId()))
@@ -38,7 +38,11 @@ public class CommunityService {
                 .toList();
     }
 
-    public Post getPost(String id) { return posts.findById(id).orElseThrow(() -> ApiException.notFound("Post")); }
+    public Post getPost(String orgId, String id) {
+        Post p = posts.findById(id).orElseThrow(() -> ApiException.notFound("Post"));
+        if (p.getOrgId() != null && !p.getOrgId().equals(orgId)) throw ApiException.notFound("Post"); // tenant boundary
+        return p;
+    }
     public List<Comment> commentsOf(String postId) { return comments.findByPostId(postId); }
     public List<Reaction> reactionsOf(String postId) {
         List<Reaction> onPost = reactions.findByPostId(postId);
@@ -46,14 +50,14 @@ public class CommunityService {
         return java.util.stream.Stream.concat(onPost.stream(), onComments.stream()).toList();
     }
 
-    public Post createPost(String id, String authorId, String kind, String title, String body, String groupId, String courseId, String lessonId) {
+    public Post createPost(String orgId, String id, String authorId, String kind, String title, String body, String groupId, String courseId, String lessonId) {
         // The client proposes the id (local-first sync re-pushes the same post after a reload). JPA save() would
         // silently turn a colliding id into an UPDATE of someone else's post, so collisions are resolved here:
         // same author → the already-stored post (idempotent re-push); someone else's id → refused.
         if (id != null && !id.isBlank()) {
             var existing = posts.findById(id);
             if (existing.isPresent()) {
-                if (!existing.get().getAuthorId().equals(authorId)) throw ApiException.forbidden("That discussion already exists");
+                if (!existing.get().getAuthorId().equals(authorId) || !orgId.equals(existing.get().getOrgId())) throw ApiException.forbidden("That discussion already exists");
                 return existing.get();
             }
         } else id = "p-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12);
@@ -65,14 +69,14 @@ public class CommunityService {
         if (groupId != null && !groups.existsById(groupId)) groupId = null;
         if (courseId != null && !courses.existsById(courseId)) courseId = null;
         if (lessonId != null && !lessons.existsById(lessonId)) lessonId = null;
-        Post p = Post.builder().id(id).authorId(authorId).kind(parseKind(kind)).title(title == null ? "" : title)
+        Post p = Post.builder().id(id).authorId(authorId).orgId(orgId).kind(parseKind(kind)).title(title == null ? "" : title)
                 .body(body == null ? "" : body).groupId(groupId).courseId(courseId).lessonId(lessonId).build();
         return posts.save(p);
     }
     private PostKind parseKind(String k) { try { return PostKind.valueOf(k.toUpperCase()); } catch (Exception e) { return PostKind.DISCUSSION; } }
 
-    public Comment addComment(String id, String postId, String authorId, String body, String parentId) {
-        Post post = posts.findById(postId).orElseThrow(() -> ApiException.notFound("Post"));
+    public Comment addComment(String orgId, String id, String postId, String authorId, String body, String parentId) {
+        Post post = getPost(orgId, postId);
         if (id != null && !id.isBlank()) {
             var existing = comments.findById(id); // same id-collision rules as posts
             if (existing.isPresent()) {
@@ -85,7 +89,7 @@ public class CommunityService {
         if (parentId != null && !comments.existsById(parentId)) parentId = null; // dangling thread parent: keep the comment at top level
         Comment saved = comments.save(Comment.builder().id(id).postId(postId).authorId(authorId).body(body).parentId(parentId).build());
         // Notify the post author (and, for a threaded reply, the parent comment's author) - never the person replying.
-        if (notifications.ruleEnabled("discussionReplies")) {
+        if (notifications.ruleEnabledFor(post.getAuthorId(), "discussionReplies")) {
             String who = users.findById(authorId).map(User::getName).orElse("Someone");
             String href = "/community?post=" + postId;
             java.util.Set<String> targets = new java.util.LinkedHashSet<>();
@@ -97,8 +101,8 @@ public class CommunityService {
         return saved;
     }
 
-    public void togglePostReaction(String postId, String userId, String type) {
-        if (!posts.existsById(postId)) throw ApiException.notFound("Post");
+    public void togglePostReaction(String orgId, String postId, String userId, String type) {
+        getPost(orgId, postId);
         ReactionType t = parseReaction(type);
         var existing = reactions.findByPostIdAndUserIdAndType(postId, userId, t);
         if (existing.isPresent()) reactions.delete(existing.get());
@@ -118,12 +122,12 @@ public class CommunityService {
 
     public void togglePin(com.workeasy360.backend.security.CurrentUser user, String postId) {
         if (user.getRole() == com.workeasy360.backend.domain.Enums.Role.LEARNER) throw ApiException.forbidden("Only instructors and admins can pin discussions");
-        Post p = posts.findById(postId).orElseThrow(() -> ApiException.notFound("Post"));
+        Post p = getPost(user.getOrgId(), postId);
         p.setPinned(!p.getPinned());
         posts.save(p);
     }
 
-    public List<Group> groups() { return groups.findAll(); }
+    public List<Group> groups(String orgId) { return groups.findByOrgId(orgId); }
     public List<String> membersOf(String groupId) { return groupMembers.findByGroupId(groupId).stream().map(GroupMember::getUserId).toList(); }
 
     public void toggleMembership(String groupId, String userId) {

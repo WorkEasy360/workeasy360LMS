@@ -14,7 +14,8 @@ public class SkillEntities {
         @Column(nullable = false, length = 120) private String name;
         @Column(length = 500) private String description;
         @Column(nullable = false) private Integer position;
-        @PrePersist void pre() { if (id == null) id = Ids.next("sc"); if (position == null) position = 0; }
+        @Column(name = "org_id", nullable = false, length = 40) private String orgId;
+        @PrePersist void pre() { if (id == null) id = Ids.next("sc"); if (position == null) position = 0; if (orgId == null) orgId = Organization.DEFAULT; }
     }
 
     @Entity @Table(name = "skills")
@@ -29,7 +30,8 @@ public class SkillEntities {
         @Column(nullable = false) private Boolean active;
         @Column(name = "created_at", nullable = false) private Instant createdAt;
         @Column(name = "updated_at", nullable = false) private Instant updatedAt;
-        @PrePersist void pre() { if (id == null) id = Ids.next("sk"); createdAt = updatedAt = Instant.now(); if (active == null) active = true; if (icon == null) icon = "target"; }
+        @Column(name = "org_id", nullable = false, length = 40) private String orgId;
+        @PrePersist void pre() { if (id == null) id = Ids.next("sk"); createdAt = updatedAt = Instant.now(); if (active == null) active = true; if (icon == null) icon = "target"; if (orgId == null) orgId = Organization.DEFAULT; }
         @PreUpdate void upd() { updatedAt = Instant.now(); }
     }
 
@@ -91,7 +93,8 @@ public class SkillEntities {
         @Column(length = 1000) private String description;
         @Column(nullable = false) private Boolean active;
         @Column(name = "created_at", nullable = false) private Instant createdAt;
-        @PrePersist void pre() { if (id == null) id = Ids.next("lp"); if (active == null) active = true; if (createdAt == null) createdAt = Instant.now(); }
+        @Column(name = "org_id", nullable = false, length = 40) private String orgId;
+        @PrePersist void pre() { if (id == null) id = Ids.next("lp"); if (active == null) active = true; if (createdAt == null) createdAt = Instant.now(); if (orgId == null) orgId = Organization.DEFAULT; }
     }
 
     @Entity @Table(name = "learning_path_nodes")

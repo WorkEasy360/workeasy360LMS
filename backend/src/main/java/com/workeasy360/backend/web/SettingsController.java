@@ -12,19 +12,20 @@ import org.springframework.web.bind.annotation.*;
 public class SettingsController {
     private final SettingsRepo repo;
     private final PermissionService perm;
-    public SettingsController(SettingsRepo repo, PermissionService perm) { this.repo = repo; this.perm = perm; }
+    private final com.workeasy360.backend.service.OrgSettingsService orgSettings;
+    public SettingsController(SettingsRepo repo, PermissionService perm, com.workeasy360.backend.service.OrgSettingsService orgSettings) { this.repo = repo; this.perm = perm; this.orgSettings = orgSettings; }
 
     public record UpdateSettingsRequest(String orgName, String supportEmail, Integer certExpiryDefault,
                                          Boolean guidesEnabled, Boolean communityEnabled, Integer maxVideoMb, Boolean instructorPublish,
                                          com.fasterxml.jackson.databind.JsonNode automation, String orgLogo) {}
 
     @GetMapping
-    public Settings get() { return repo.findById("singleton").orElseThrow(() -> ApiException.notFound("Settings")); }
+    public Settings get(@AuthenticationPrincipal CurrentUser user) { return orgSettings.forOrg(user.getOrgId()); }
 
     @PutMapping
     public Settings update(@AuthenticationPrincipal CurrentUser user, @RequestBody UpdateSettingsRequest req) {
         if (!perm.isAdmin(user)) throw ApiException.forbidden("Only an admin can change settings");
-        Settings s = get();
+        Settings s = orgSettings.forOrg(user.getOrgId());
         if (req.orgName() != null) s.setOrgName(req.orgName());
         if (req.supportEmail() != null) s.setSupportEmail(req.supportEmail());
         if (req.certExpiryDefault() != null) s.setCertExpiryDefault(req.certExpiryDefault());

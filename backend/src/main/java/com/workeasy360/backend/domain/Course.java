@@ -40,8 +40,11 @@ public class Course {
     @Column(name = "price_cents", nullable = false) private Integer priceCents;   // 0 = free
     @Column(nullable = false, length = 3) private String currency;
 
+    @Column(name = "org_id", nullable = false, length = 40) private String orgId;
+
     @PrePersist void prePersist() {
         if (id == null) id = Ids.next("c");
+        if (orgId == null) orgId = Organization.DEFAULT;
         if (createdAt == null) createdAt = Instant.now();
         if (updatedAt == null) updatedAt = createdAt; // seed data may pin an older timestamp so a client's fresher copy wins the merge
         if (status == null) status = Enums.CourseStatus.DRAFT;

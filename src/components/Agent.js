@@ -45,7 +45,7 @@ export function initAgent(host) {
 export function updateAgent(path) {
   if (!launcher) return;
   const user = getUser();
-  if (!user) { document.body.classList.remove("has-agent"); launcher.hidden = true; panel.hidden = true; st = fresh(null); return; }
+  if (!user || user.role === "platform") { document.body.classList.remove("has-agent"); launcher.hidden = true; panel.hidden = true; st = fresh(null); return; } // the agent coaches org users, not the platform owner
   if (user.id !== st.userId) st = fresh(user.id);
   st.path = path;
   st.lessonId = lessonFromPath(path);

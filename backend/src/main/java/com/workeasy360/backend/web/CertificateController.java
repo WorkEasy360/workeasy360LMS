@@ -19,7 +19,7 @@ public class CertificateController {
 
     @GetMapping
     public List<CertificateDto> list(@AuthenticationPrincipal CurrentUser user, @RequestParam(defaultValue = "false") boolean all) {
-        List<Certificate> certs = (all && perm.isAdmin(user)) ? service.all() : service.forUser(user.getId());
+        List<Certificate> certs = (all && perm.isAdmin(user)) ? service.allForOrg(user.getOrgId()) : service.forUser(user.getId());
         return service.views(certs);
     }
 

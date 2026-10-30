@@ -47,6 +47,7 @@ public class OrderService {
     /** Starts (or resumes) a purchase: one PENDING order per learner and course; refused when access already exists. */
     public Checkout start(CurrentUser user, String courseId) {
         Course c = courses.findById(courseId).orElseThrow(() -> ApiException.notFound("Course"));
+        if (c.getOrgId() != null && !c.getOrgId().equals(user.getOrgId())) throw ApiException.notFound("Course"); // tenant boundary
         if (c.getStatus() != CourseStatus.PUBLISHED) throw ApiException.notFound("Course");
         if (AccessService.isFree(c)) throw ApiException.badRequest("This course is free — enrol instead of purchasing.");
         if (access.entitlement(user, c).isPresent()) throw ApiException.conflict("You already have access to this course.");

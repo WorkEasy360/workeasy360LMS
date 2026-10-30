@@ -68,6 +68,18 @@ export const api = {
   deleteUser: (id) => del(`/users/${id}`), // admin: permanent; refused for yourself and for instructors who still own courses
   notifications: () => get("/notifications"),
   syncTicket: () => post("/sync/ticket"), // one-time ticket for the real-time event stream
+
+  // public commercial surface (no sign-in)
+  publicPlans: () => get("/public/plans"),
+  registerOrganization: (body) => post("/public/organizations", body), // {company, adminName, adminEmail, planId} → trial org + admin reset link
+
+  // platform owner (WorkEasy360 staff only)
+  platformOrgs: (q) => get("/platform/organizations" + (q ? `?q=${encodeURIComponent(q)}` : "")),
+  platformOrgStatus: (id, status) => post(`/platform/organizations/${id}/status`, { status }),
+  platformStats: () => get("/platform/stats"),
+  platformPlans: () => get("/platform/plans"),
+  platformUpsertPlan: (body) => post("/platform/plans", body),
+  platformAudit: (orgId) => get("/platform/audit" + (orgId ? `?orgId=${encodeURIComponent(orgId)}` : "")),
   markNotificationRead: (id) => post(`/notifications/${id}/read`),
   markAllNotificationsRead: () => post("/notifications/read-all"),
   systemStatus: () => get("/system/status"), // admin: database, storage, AI provider, CORS — no secrets

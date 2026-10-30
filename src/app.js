@@ -38,6 +38,8 @@ import { CommunityPage } from "./pages/Community.js";
 import { AssessmentsPage, LearnersPage } from "./pages/Instructor.js";
 import { AnalyticsPage } from "./pages/Analytics.js";
 import { PeoplePage, AutomationPage, IntegrationsPage, SettingsPage } from "./pages/Admin.js";
+import { PlatformOrgsPage, PlatformPlansPage, PlatformAuditPage } from "./pages/Platform.js";
+import { OrgSignupPage } from "./pages/OrgSignup.js";
 
 const $ = (id) => document.getElementById(id);
 let currentPage = null;
@@ -49,6 +51,7 @@ const LEARNER = ["learner"];
 // path, page factory, options { roles, public }
 route("/login", null, { public: true, auth: true });
 route("/signup", null, { public: true, auth: true, signup: true });
+route("/signup-org", null, { public: true, auth: true, signupOrg: true });
 route("/forgot", null, { public: true, auth: true, forgot: true });
 route("/reset/:token", null, { public: true, auth: true, reset: true });
 route("/checkout/:orderId", CheckoutPage, { roles: ALL });
@@ -85,6 +88,11 @@ route("/verify/:id?", VerifyPage, { public: true });
 route("/assessments", AssessmentsPage, { roles: AUTHOR });
 route("/learners", LearnersPage, { roles: AUTHOR });
 
+// platform owner (WorkEasy360 staff)
+route("/platform", PlatformOrgsPage, { roles: ["platform"] });
+route("/platform/plans", PlatformPlansPage, { roles: ["platform"] });
+route("/platform/audit", PlatformAuditPage, { roles: ["platform"] });
+
 // admin
 route("/people", PeoplePage, { roles: ["admin"] });
 route("/certifications", CertificationsAdminPage, { roles: ["admin"] });
@@ -114,6 +122,7 @@ function dispatch(match) {
     if (user) return navigate("/", { replace: true });
     showAuth();
     if (r.opts.signup) { SignupPage($("auth-root")); document.title = "Create account · WorkEasyLMS"; return; }
+    if (r.opts.signupOrg) { OrgSignupPage($("auth-root")); document.title = "Start your organisation · WorkEasyLMS"; return; }
     if (r.opts.forgot) { ForgotPage($("auth-root")); document.title = "Reset password · WorkEasyLMS"; return; }
     if (r.opts.reset) { ResetPage($("auth-root"), match.params.token); document.title = "Choose a new password · WorkEasyLMS"; return; }
     LoginPage($("auth-root"));
@@ -131,9 +140,12 @@ function dispatch(match) {
     return;
   }
 
+  // The platform owner's home is the platform console, not a customer workspace.
+  if (user.role === "platform" && match.path === "/") return navigate("/platform", { replace: true });
+
   if (r?.opts.roles && !r.opts.roles.includes(user.role)) {
     toast("That page isn't available for your role.", { type: "info" });
-    return navigate("/", { replace: true });
+    return navigate(user.role === "platform" ? "/platform" : "/", { replace: true });
   }
 
   $("auth-root").hidden = true;

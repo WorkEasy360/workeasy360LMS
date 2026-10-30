@@ -29,12 +29,14 @@ public class EnrollmentService {
 
     /** Instructor/admin assigns a learner to a course (idempotent; an existing enrolment keeps its progress, due date is updated when given). */
     public Enrollment assign(CurrentUser actor, Course course, String userId, Long dueAt) {
+        if (!perm.sameOrg(actor, course)) throw ApiException.notFound("Course"); // another tenant's course does not exist here
         if (!perm.canManageEnrollments(actor, course)) throw ApiException.forbidden("Not allowed to manage enrollments for this course");
-        if (users.findById(userId).isEmpty()) throw ApiException.notFound("User");
+        var target = users.findById(userId).orElseThrow(() -> ApiException.notFound("User"));
+        if (target.getOrgId() != null && !target.getOrgId().equals(course.getOrgId())) throw ApiException.notFound("User"); // tenant boundary
         boolean existed = enrollments.findByUserIdAndCourseId(userId, course.getId()).isPresent();
         Enrollment e = enroll(userId, course.getId(), dueAt, "ASSIGNED", null);
         if (existed && dueAt != null) { e.setDueAt(Instant.ofEpochMilli(dueAt)); e = enrollments.save(e); }
-        if (!existed && !userId.equals(actor.getId()) && notifications.ruleEnabled("enrolmentNotifications"))
+        if (!existed && !userId.equals(actor.getId()) && notifications.ruleEnabledFor(userId, "enrolmentNotifications"))
             notifications.notify(userId, "enrolment", "You've been enrolled in " + course.getTitle(),
                     e.getDueAt() == null ? "Start whenever you're ready." : "Due " + e.getDueAt().toString().substring(0, 10) + ".", "/learn/" + course.getId());
         return e;
@@ -67,11 +69,13 @@ public class EnrollmentService {
     public List<Enrollment> mine(String userId) { return enrollments.findByUserId(userId); }
 
     public List<Enrollment> forCourse(CurrentUser user, Course course) {
+        if (!perm.sameOrg(user, course)) throw ApiException.notFound("Course");
         if (!perm.canManageEnrollments(user, course)) throw ApiException.forbidden("Not allowed to view enrollments for this course");
         return enrollments.findByCourseId(course.getId());
     }
 
     public void remove(CurrentUser user, Course course, String userId) {
+        if (!perm.sameOrg(user, course)) throw ApiException.notFound("Course");
         if (!perm.canManageEnrollments(user, course)) throw ApiException.forbidden("Not allowed to manage enrollments for this course");
         enrollments.findByUserIdAndCourseId(userId, course.getId()).ifPresent(enrollments::delete);
     }

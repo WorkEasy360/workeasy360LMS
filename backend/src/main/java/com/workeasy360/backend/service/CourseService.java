@@ -31,19 +31,21 @@ public class CourseService {
     private final ModuleRepo modules;
     private final LessonRepo lessons;
     private final SettingsRepo settingsRepo;
+    private final EntitlementService entitlements;
     private final PermissionService perm;
 
     private final SkillService skillService;
     private final EnrollmentRepo enrollmentRepo;
 
     private final AccessService access;
-    public CourseService(CourseRepo courses, ModuleRepo modules, LessonRepo lessons, SettingsRepo settingsRepo, PermissionService perm, SkillService skillService, EnrollmentRepo enrollmentRepo, AccessService access) {
-        this.courses = courses; this.modules = modules; this.lessons = lessons; this.settingsRepo = settingsRepo; this.perm = perm; this.skillService = skillService; this.enrollmentRepo = enrollmentRepo; this.access = access;
+    public CourseService(CourseRepo courses, ModuleRepo modules, LessonRepo lessons, SettingsRepo settingsRepo, PermissionService perm, SkillService skillService, EnrollmentRepo enrollmentRepo, AccessService access, EntitlementService entitlements) {
+        this.courses = courses; this.modules = modules; this.lessons = lessons; this.settingsRepo = settingsRepo; this.perm = perm; this.skillService = skillService; this.enrollmentRepo = enrollmentRepo; this.access = access; this.entitlements = entitlements;
     }
 
     /** The tree as this caller may see it: full for editors, entitled learners and free published courses; redacted (no lesson bodies) otherwise. */
     public CourseTreeDto treeFor(CurrentUser user, String courseId) {
         Course c = get(courseId);
+        if (!perm.sameOrg(user, c)) throw ApiException.notFound("Course"); // another tenant's course does not exist for this caller
         CourseTreeDto t = tree(courseId);
         return access.canAccessContent(user, c) ? t : CourseDtos.locked(t);
     }
@@ -53,7 +55,7 @@ public class CourseService {
 
     public List<CourseSummaryDto> list(CurrentUser user, String statusFilter, boolean mineOnly) {
         List<Course> all = (user.getRole() == Role.ADMIN && !mineOnly)
-                ? courses.findAll()
+                ? courses.findByOrgId(user.getOrgId())
                 : courses.findByInstructorId(user.getId());
         return summaries(all.stream()
                 .filter(c -> statusFilter == null || statusFilter.isBlank() || c.getStatus().name().equalsIgnoreCase(statusFilter))
@@ -61,9 +63,9 @@ public class CourseService {
                 .toList());
     }
 
-    // Catalog for learners: published + visible.
-    public List<CourseSummaryDto> catalog() {
-        return summaries(courses.findByStatus(CourseStatus.PUBLISHED).stream()
+    // Catalog for learners: published + visible, within the caller's organization only.
+    public List<CourseSummaryDto> catalog(CurrentUser user) {
+        return summaries(courses.findByOrgIdAndStatus(user.getOrgId(), CourseStatus.PUBLISHED).stream()
                 .filter(c -> c.getVisibility() == CourseVisibility.CATALOG)
                 .sorted(Comparator.comparing(Course::getUpdatedAt).reversed())
                 .toList());
@@ -80,12 +82,15 @@ public class CourseService {
         return list.stream().map(c -> { int[] n = counts.getOrDefault(c.getId(), new int[2]); return CourseDtos.toSummary(c, n[0], n[1]); }).toList();
     }
 
-    /** A course's content is readable by whoever can edit it, by anyone once it is published, and by its enrolled learners. */
+    /** A course's content is readable by whoever can edit it, by anyone IN ITS ORGANIZATION once it is published, and by its enrolled learners. */
     public boolean canRead(CurrentUser user, Course c) {
+        if (!perm.sameOrg(user, c)) return false;
         return perm.canEditCourse(user, c) || c.getStatus() == CourseStatus.PUBLISHED || enrollmentRepo.findByUserIdAndCourseId(user.getId(), c.getId()).isPresent();
     }
     public void requireReadable(CurrentUser user, String courseId) {
-        if (!canRead(user, get(courseId))) throw ApiException.forbidden("This course is not available to you");
+        Course c = get(courseId);
+        if (!perm.sameOrg(user, c)) throw ApiException.notFound("Course"); // another tenant's course does not exist for this caller
+        if (!canRead(user, c)) throw ApiException.forbidden("This course is not available to you");
     }
 
     /**
@@ -94,12 +99,12 @@ public class CourseService {
      */
     public List<CourseTreeDto> treesFor(CurrentUser user) {
         java.util.Map<String, Course> scope = new java.util.LinkedHashMap<>();
-        if (user.getRole() == Role.ADMIN) courses.findAll().forEach(c -> scope.put(c.getId(), c));
+        if (user.getRole() == Role.ADMIN) courses.findByOrgId(user.getOrgId()).forEach(c -> scope.put(c.getId(), c));
         else if (user.getRole() == Role.INSTRUCTOR) courses.findByInstructorId(user.getId()).forEach(c -> scope.put(c.getId(), c));
         else {
-            courses.findByStatus(CourseStatus.PUBLISHED).stream().filter(c -> c.getVisibility() == CourseVisibility.CATALOG).forEach(c -> scope.put(c.getId(), c));
+            courses.findByOrgIdAndStatus(user.getOrgId(), CourseStatus.PUBLISHED).stream().filter(c -> c.getVisibility() == CourseVisibility.CATALOG).forEach(c -> scope.put(c.getId(), c));
             List<String> enrolled = enrollmentRepo.findByUserId(user.getId()).stream().map(Enrollment::getCourseId).filter(id -> !scope.containsKey(id)).toList();
-            if (!enrolled.isEmpty()) courses.findAllById(enrolled).forEach(c -> scope.put(c.getId(), c));
+            if (!enrolled.isEmpty()) courses.findAllById(enrolled).stream().filter(c -> perm.sameOrg(user, c)).forEach(c -> scope.put(c.getId(), c));
         }
         if (scope.isEmpty()) return List.of();
         List<CourseModule> mods = modules.findByCourseIdIn(scope.keySet());
@@ -130,10 +135,11 @@ public class CourseService {
 
     public Course create(CurrentUser user, String id, String title) {
         if (!perm.canCreateCourse(user)) throw ApiException.forbidden("You don't have permission to create courses");
+        entitlements.requireCourseCapacity(user.getOrgId()); // subscription plan course limit
         Course c = Course.builder()
                 .id(id).title(title == null ? "" : title).description("").category("Sales").level("Beginner")
                 .status(CourseStatus.DRAFT).visibility(CourseVisibility.CATALOG).instructorId(user.getId())
-                .sequential(true).certExpiryMonths(0)
+                .sequential(true).certExpiryMonths(0).orgId(user.getOrgId())
                 .coverHue(HUES[random.nextInt(HUES.length)]).coverIcon(ICONS[random.nextInt(ICONS.length)])
                 .skillsJson("[]").build();
         return courses.save(c);
@@ -162,6 +168,7 @@ public class CourseService {
     public Course assignInstructor(CurrentUser user, String id, String instructorId) {
         if (!perm.canAssignInstructor(user)) throw ApiException.forbidden("Only an admin can assign instructors");
         Course c = get(id);
+        if (!perm.sameOrg(user, c)) throw ApiException.notFound("Course");
         c.setInstructorId(instructorId);
         return courses.save(c);
     }
@@ -180,7 +187,7 @@ public class CourseService {
         Course c = get(id);
         List<String> blockers = readiness(id);
         if (!blockers.isEmpty()) return new PublishResult(false, c.getStatus().name(), blockers, false);
-        boolean instructorsCanPublish = settingsRepo.findById("singleton").map(Settings::getInstructorPublish).orElse(true);
+        boolean instructorsCanPublish = settingsRepo.findByOrgId(c.getOrgId()).map(Settings::getInstructorPublish).orElse(true);
         if (!perm.canPublish(user, c, instructorsCanPublish)) {
             if (perm.canSubmitForReview(user, c)) {
                 c.setStatus(CourseStatus.IN_REVIEW);

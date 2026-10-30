@@ -20,11 +20,13 @@ public class AuthController {
     private final com.workeasy360.backend.service.NotificationService notifications;
     private final com.workeasy360.backend.service.PasswordResetService passwordResets;
     private final com.workeasy360.backend.service.MailService mail;
+    private final com.workeasy360.backend.service.EntitlementService entitlements;
 
     public AuthController(UserRepo users, PasswordEncoder encoder, JwtService jwt, com.workeasy360.backend.service.NotificationService notifications,
-                          com.workeasy360.backend.service.PasswordResetService passwordResets, com.workeasy360.backend.service.MailService mail) {
+                          com.workeasy360.backend.service.PasswordResetService passwordResets, com.workeasy360.backend.service.MailService mail,
+                          com.workeasy360.backend.service.EntitlementService entitlements) {
         this.users = users; this.encoder = encoder; this.jwt = jwt; this.notifications = notifications;
-        this.passwordResets = passwordResets; this.mail = mail;
+        this.passwordResets = passwordResets; this.mail = mail; this.entitlements = entitlements;
     }
 
     // Brute-force throttle: after MAX_FAILS wrong passwords for one account the account pauses for LOCK_MS.
@@ -54,8 +56,9 @@ public class AuthController {
         User u = users.findByEmailIgnoreCase(email).orElseThrow(() -> failed(email));
         if (!encoder.matches(req.password(), u.getPasswordHash())) throw failed(email);
         if ("INACTIVE".equalsIgnoreCase(u.getStatus())) throw new BadCredentialsException("bad credentials"); // deactivated accounts cannot sign in
+        entitlements.requireSignInAllowed(u.getOrgId()); // suspended organization / lapsed subscription
         loginFails.remove(email);
-        String token = jwt.issue(u.getId(), u.getRole().name(), com.workeasy360.backend.security.CurrentUser.DEFAULT_ORG);
+        String token = jwt.issue(u.getId(), u.getRole().name(), u.getOrgId());
         try { notifications.reminders(u.getId()); } catch (RuntimeException ignored) { /* reminders never block sign-in */ }
         return new LoginResponse(token, UserDto.of(u));
     }
@@ -77,7 +80,7 @@ public class AuthController {
                 .title("Learner").dept("Self-registered").hue((int) (Math.abs(email.hashCode()) % 360)).status("ACTIVE").streak(0).build();
         try { u = users.save(u); }
         catch (org.springframework.dao.DataIntegrityViolationException e) { throw ApiException.conflict("An account with that e-mail already exists. Sign in instead."); }
-        return new LoginResponse(jwt.issue(u.getId(), u.getRole().name(), com.workeasy360.backend.security.CurrentUser.DEFAULT_ORG), UserDto.of(u));
+        return new LoginResponse(jwt.issue(u.getId(), u.getRole().name(), u.getOrgId()), UserDto.of(u));
     }
 
     /** Self-service "forgot password". Always answers 200 so the endpoint never reveals whether an account exists;
@@ -113,8 +116,9 @@ public class AuthController {
     public LoginResponse reset(@RequestBody ResetRequest req) {
         User u = passwordResets.reset(req == null ? null : req.token(), req == null ? null : req.password());
         if ("INACTIVE".equalsIgnoreCase(u.getStatus())) throw ApiException.badRequest("That reset link is no longer valid. Request a new one.");
+        entitlements.requireSignInAllowed(u.getOrgId());
         loginFails.remove(u.getEmail().toLowerCase()); // a fresh password clears any brute-force lock
-        return new LoginResponse(jwt.issue(u.getId(), u.getRole().name(), com.workeasy360.backend.security.CurrentUser.DEFAULT_ORG), UserDto.of(u));
+        return new LoginResponse(jwt.issue(u.getId(), u.getRole().name(), u.getOrgId()), UserDto.of(u));
     }
 
     /** Signed-in password change: proves the current password, applies the same strength rules as registration. */

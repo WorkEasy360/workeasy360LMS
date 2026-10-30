@@ -58,7 +58,7 @@ public class SubmissionService {
         s.setReviewedBy(user.getId());
         Submission saved = submissions.save(s);
         skillService.recordAssessment(s.getUserId(), s.getLessonId(), "ASSIGNMENT", null, true); // reviewed → full evidence
-        if (notifications.ruleEnabled("reviewNotifications"))
+        if (notifications.ruleEnabledFor(s.getUserId(), "reviewNotifications"))
             notifications.notify(s.getUserId(), "review", "Your assignment was reviewed", feedback == null || feedback.isBlank() ? "Open the lesson to see the outcome." : feedback,
                     "/learn/" + s.getCourseId() + "/" + s.getLessonId(), java.time.Duration.ofMinutes(1));
         return saved;

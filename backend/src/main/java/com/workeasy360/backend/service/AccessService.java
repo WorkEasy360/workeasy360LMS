@@ -29,12 +29,14 @@ public class AccessService {
     public Optional<Enrollment> entitlement(CurrentUser user, Course c) { return enrollments.findByUserIdAndCourseId(user.getId(), c.getId()); }
 
     public boolean canAccessContent(CurrentUser user, Course c) {
+        if (!perm.sameOrg(user, c)) return false; // tenant boundary: another organization's course does not exist for this user
         if (perm.canEditCourse(user, c)) return true;
         if (entitlement(user, c).isPresent()) return true;
         return c.getStatus() == CourseStatus.PUBLISHED && isFree(c);
     }
 
     public void requireContentAccess(CurrentUser user, Course c) {
+        if (!perm.sameOrg(user, c)) throw ApiException.notFound("Course"); // don't reveal that it exists elsewhere
         if (canAccessContent(user, c)) return;
         if (c.getStatus() == CourseStatus.PUBLISHED && !isFree(c)) throw new ApiException(HttpStatus.PAYMENT_REQUIRED, "This course must be purchased before its content can be opened.");
         throw ApiException.forbidden("This course is not available to you");

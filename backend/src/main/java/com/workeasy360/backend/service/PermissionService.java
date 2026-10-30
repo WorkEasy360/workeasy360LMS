@@ -13,22 +13,29 @@ import org.springframework.stereotype.Component;
 @Component
 public class PermissionService {
 
+    /** Tenant boundary: the one rule every other rule sits behind. An admin is an admin of THEIR organization only. */
+    public boolean sameOrg(CurrentUser u, Course course) {
+        return course.getOrgId() == null || course.getOrgId().equals(u.getOrgId());
+    }
+
     public boolean canCreateCourse(CurrentUser u) {
         return u.getRole() == Role.ADMIN || u.getRole() == Role.INSTRUCTOR;
     }
 
     public boolean canEditCourse(CurrentUser u, Course course) {
+        if (!sameOrg(u, course)) return false;
         if (u.getRole() == Role.ADMIN) return true;
         return u.getRole() == Role.INSTRUCTOR && course.getInstructorId().equals(u.getId());
     }
 
     public boolean canPublish(CurrentUser u, Course course, boolean instructorsCanPublish) {
+        if (!sameOrg(u, course)) return false;
         if (u.getRole() == Role.ADMIN) return true;
         return u.getRole() == Role.INSTRUCTOR && course.getInstructorId().equals(u.getId()) && instructorsCanPublish;
     }
 
     public boolean canSubmitForReview(CurrentUser u, Course course) {
-        return u.getRole() == Role.INSTRUCTOR && course.getInstructorId().equals(u.getId());
+        return sameOrg(u, course) && u.getRole() == Role.INSTRUCTOR && course.getInstructorId().equals(u.getId());
     }
 
     public boolean canReview(CurrentUser u) { return u.getRole() == Role.ADMIN; }
@@ -37,4 +44,6 @@ public class PermissionService {
     public boolean canManageEnrollments(CurrentUser u, Course course) { return canEditCourse(u, course); }
     public boolean canViewAnalytics(CurrentUser u, Course course) { return canEditCourse(u, course); }
     public boolean isAdmin(CurrentUser u) { return u.getRole() == Role.ADMIN; }
+    /** WorkEasy360's own staff: platform oversight, never a member of a customer organization. */
+    public boolean isPlatform(CurrentUser u) { return u.getRole() == Role.PLATFORM; }
 }

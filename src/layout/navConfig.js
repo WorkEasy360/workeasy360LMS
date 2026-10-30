@@ -48,9 +48,16 @@ export const navByRole = {
       { label: "Settings", path: "/settings", icon: "settings" },
     ] },
   ],
+  platform: [
+    { section: "Platform", items: [
+      { label: "Organizations", path: "/platform", icon: "home" },
+      { label: "Plans", path: "/platform/plans", icon: "layers" },
+      { label: "Audit log", path: "/platform/audit", icon: "shield" },
+    ] },
+  ],
 };
 
-export const ROLE_LABEL = { learner: "Learner", instructor: "Instructor", admin: "Admin" };
+export const ROLE_LABEL = { learner: "Learner", instructor: "Instructor", admin: "Admin", platform: "Platform Owner" };
 
 // Which path in the nav should be highlighted for a given route path.
 export function activeNavPath(path, role) {

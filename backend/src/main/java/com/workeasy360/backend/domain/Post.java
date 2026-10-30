@@ -23,6 +23,7 @@ public class Post {
 
     @Column(nullable = false) private Boolean pinned;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
+    @Column(name = "org_id", nullable = false, length = 40) private String orgId;
 
-    @PrePersist void prePersist() { if (id == null) id = Ids.next("post"); if (createdAt == null) createdAt = Instant.now(); if (kind == null) kind = Enums.PostKind.DISCUSSION; if (pinned == null) pinned = false; if (body == null) body = ""; }
+    @PrePersist void prePersist() { if (id == null) id = Ids.next("post"); if (createdAt == null) createdAt = Instant.now(); if (kind == null) kind = Enums.PostKind.DISCUSSION; if (pinned == null) pinned = false; if (body == null) body = ""; if (orgId == null) orgId = Organization.DEFAULT; }
 }
