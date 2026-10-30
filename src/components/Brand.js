@@ -5,7 +5,7 @@ import { h } from "../lib/dom.js";
 export const PRODUCT_NAME = "WorkEasyLMS";
 const PRODUCT_SUFFIX = "LMS";
 const ASSETS = "/src/assets/brand/";
-export const AGENT_LOGO = ASSETS + "agent-logo.png";
+export const AGENT_LOGO = ASSETS + "agent-logo.png?v=2"; // ?v busts caches of the old opaque artwork
 export const BRAND_IMAGES = { logo: ASSETS + "workeasy360-logo.png", logoWhite: ASSETS + "workeasy360-logo-white.png", mark: ASSETS + "workeasy360-mark.png" };
 
 /** The product lockup: the official "W" mark followed by the wordmark written as WorkEasy + LMS, with LMS in brand

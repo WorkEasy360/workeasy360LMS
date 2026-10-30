@@ -35,7 +35,7 @@ export function registerAgent({ suites, log, ok, sleep, q, click, type, waitFor,
     const l = await waitFor(() => shown(launcher()) && launcher(), 4000, "agent launcher");
     ok(!!l, "launcher is shown on Home");
     const img = l?.querySelector("img");
-    ok(!!(await imgLoaded(img)) && /\/src\/assets\/brand\/agent-logo\.png$/.test(img.getAttribute("src")), "launcher shows the agent artwork (agent-logo.png)");
+    ok(!!(await imgLoaded(img)) && /\/src\/assets\/brand\/agent-logo\.png(\?|$)/.test(img.getAttribute("src")), "launcher shows the agent artwork (agent-logo.png)");
     const lr = l.getBoundingClientRect(), app = q("#app").getBoundingClientRect();
     ok(Math.abs(app.right - lr.right - 24) < 2 && Math.abs(app.bottom - lr.bottom - 24) < 2 && Math.round(lr.width) === 56, `launcher is 56px, 24px from the bottom-right corner (${Math.round(lr.width)}px)`);
     ok(l.getAttribute("aria-expanded") === "false" && panel().hidden, "panel starts closed");
@@ -80,7 +80,7 @@ export function registerAgent({ suites, log, ok, sleep, q, click, type, waitFor,
     // Hidden on /coach (the full-page coach), back on other pages
     navigate("/coach"); await waitFor(() => q('[data-coach-state="ready"]'), 8000, "coach page");
     ok(!shown(launcher()) && panel().hidden, "launcher is hidden on the full Learning Coach page");
-    ok(q(".coach-avatar")?.tagName === "IMG" && /agent-logo\.png$/.test(q(".coach-avatar").getAttribute("src")), "Learning Coach page uses the same agent artwork");
+    ok(q(".coach-avatar")?.tagName === "IMG" && /agent-logo\.png(\?|$)/.test(q(".coach-avatar").getAttribute("src")), "Learning Coach page uses the same agent artwork");
     navigate("/my-learning"); await sleep(400);
     ok(shown(launcher()), "launcher returns on the next page");
 

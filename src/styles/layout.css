@@ -148,12 +148,14 @@ body { overflow-x: hidden; }
 
 /* AI agent "Work Easy AI Agent": launcher + side panel, as in WorkEasy360 Booking */
 .agent-launcher {
+  /* no box behind the robot: the artwork's backdrop is transparent, so the agent floats on the page with a soft
+     shadow traced around its own shape (filter, not box-shadow, so no rectangle appears) */
   position: absolute; right: 24px; bottom: 24px; z-index: 50; width: 56px; height: 56px; padding: 0; border: 0; border-radius: 16px; cursor: pointer;
-  background: var(--c-navy); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1); transition: transform var(--t-micro) var(--ease);
+  background: transparent; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.28)); transition: transform var(--t-micro) var(--ease), filter var(--t-micro) var(--ease);
 }
-.agent-launcher:hover { transform: scale(1.05); }
+.agent-launcher:hover { transform: scale(1.08); filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.34)); }
 .agent-launcher:active { transform: scale(0.95); }
-.agent-launcher-img { width: 100%; height: 100%; border-radius: 16px; }
+.agent-launcher-img { width: 100%; height: 100%; }
 .agent-busy { position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; border-radius: 50%; background: var(--c-primary); border: 2px solid #fff; animation: agent-pulse 1.2s var(--ease) infinite; }
 @keyframes agent-pulse { 50% { opacity: 0.45; } }
 .agent-avatar { display: block; flex: none; object-fit: cover; user-select: none; }
