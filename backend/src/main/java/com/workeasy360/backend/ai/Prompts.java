@@ -59,9 +59,33 @@ public final class Prompts {
         return sb.toString();
     }
 
-    public static final String COACH_VERSION = "learning-coach-v1";
-    public static final String COACH_SYSTEM = """
-            You are the Learning Coach inside a workplace learning platform. You help ONE learner decide what to learn or do next, using ONLY the
+    /** The WorkEasy360 master agent prompt (resources/prompts/workeasy360-agent.md): identity, role model, security
+     *  policy and behaviour rules for the AI assistant. It is maintained as a file so the business can evolve it
+     *  without touching code, and prepended to the coach's operational contract below when a real provider runs.
+     *  The deterministic mock provider reads only the user prompt, so tests are unaffected by its wording. */
+    public static final String AGENT_IDENTITY = loadResource("/prompts/workeasy360-agent.md");
+
+    /** What THIS deployment actually offers the model, so the master prompt's "use only registered tools" rule
+     *  resolves honestly: no callable tools, one organization, everything arrives in the context JSON. */
+    public static final String AGENT_RUNTIME = """
+
+            ---
+            RUNTIME PROFILE OF THIS DEPLOYMENT (authoritative for this conversation):
+            - Single-organization deployment: the authenticated user's organization is the only one; there is no cross-tenant data in your context.
+            - You have NO callable application tools registered in this runtime. Everything you may use arrives below as the "Learner context" JSON
+              (and, when present, the "Current lesson" JSON), already authorized and scoped to the authenticated user by the backend.
+            - You cannot execute operations (enrolment, publishing, payments, e-mail). When a user asks for an operation, point them to the right
+              place in the product (their administrator, the Course Builder, the checkout page) instead of claiming to do it.
+            - Everything you state about courses, progress, skills, certificates or recommendations must come from the context JSON; if it is not
+              there, say it is not available to you.
+            """;
+
+    public static final String COACH_VERSION = "learning-coach-v2";
+    public static final String COACH_SYSTEM = AGENT_IDENTITY + AGENT_RUNTIME + """
+
+            ---
+            OPERATIONAL CONTRACT FOR THIS CONVERSATION:
+            You are acting as the Learning Coach / WorkEasy360 Assistant for ONE authenticated user. You help them decide what to learn or do next, using ONLY the
             "Learner context" JSON you are given (their enrolments, progress, next lessons, skills, gaps, learning journeys, certificates, recent
             activity, available published courses and the platform's deterministic recommendations). Never invent courses, lessons, skills, scores or
             ids: if something is not in the context, say it is not available. Prefer the facts (numbers, titles) from the context over generic advice.
@@ -85,5 +109,15 @@ public final class Prompts {
     public static final String RETRY_HINT = "\n\nYour previous reply was not valid JSON matching the schema. Reply again with exactly one valid JSON object and nothing else.";
 
     private static ArrayNode arr(JsonNode n) { return n != null && n.isArray() ? (ArrayNode) n : Json.MAPPER.createArrayNode(); }
+
+    private static String loadResource(String path) {
+        try (java.io.InputStream in = Prompts.class.getResourceAsStream(path)) {
+            if (in == null) throw new IllegalStateException("Missing prompt resource " + path);
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Could not read prompt resource " + path, e);
+        }
+    }
+
     private Prompts() {}
 }

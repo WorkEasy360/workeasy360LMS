@@ -135,7 +135,7 @@ export function registerCoach({ suites, log, ok, sleep, q, click, type, waitFor,
     const full = await apiGet(`/coach/conversations/${convs[0].id}`);
     ok(full.messages.length === 4 && full.messages[1].role === "COACH" && full.messages[1].generationId, "conversation persists both turns with the AI audit reference");
     const gen = await apiGet(`/ai/generations/${full.messages[1].generationId}`);
-    ok(gen?.type === "COACH" && gen.promptVersion === "learning-coach-v1" && gen.provider === "mock", "each coach turn is audited (type COACH, prompt learning-coach-v1)");
+    ok(gen?.type === "COACH" && gen.promptVersion === "learning-coach-v2" && gen.provider === "mock", "each coach turn is audited (type COACH, prompt learning-coach-v2)");
   };
 
   // Coach: lesson context grounds explanations in the actual lesson content.
@@ -178,11 +178,14 @@ export function registerCoach({ suites, log, ok, sleep, q, click, type, waitFor,
 
   // RBAC / ownership: a learner cannot read or act on another learner's coach data, recommendations or plans.
   suites.coachRbac = async () => {
+    // A plan needs a course in progress; build one instead of assuming the demo learner has any.
+    const { courseId } = await suites.__inProgressCourse();
     await loginReal(DEMO_EMAIL_BY_ROLE.learner, DEMO_PASSWORD);
     const mine = await ask("What should I learn next?");
     const convId = mine.body.conversationId;
     const recs = await apiGet("/recommendations");
-    const plan = await (await apiPost("/learning-plans", { minutes: 15 })).json();
+    const plan = await (await apiPost("/learning-plans", { minutes: 15, courseId })).json();
+    ok(!!plan.id, "setup: a 15-minute plan exists for the fresh in-progress course");
     // switch to another learner (Sam) — the demo login only has one learner password; use the seeded account directly
     const samTok = (await fetch("http://localhost:8080/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "sam@workeasy360.dev", password: DEMO_PASSWORD }) }).then((r) => r.json())).token;
     const as = (path, opts = {}) => fetch("http://localhost:8080/api" + path, { ...opts, headers: { Authorization: "Bearer " + samTok, "Content-Type": "application/json" } });

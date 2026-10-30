@@ -141,6 +141,12 @@ automatically: the **AI Course Builder** and **AI Quiz Generator** produce draft
 recommendations) and never receives passwords, tokens, keys or other users' data. Recommendations, next steps and
 learning plans are deterministic and work with `AI_ENABLED=false`; the coach chat degrades to the mock provider.
 
+The assistant's identity, role model and security policy are the **WorkEasy360 master agent prompt** at
+`backend/src/main/resources/prompts/workeasy360-agent.md` — edit that file to evolve the assistant's behaviour, no
+code change needed. When a real provider runs, `Prompts.COACH_SYSTEM` (`learning-coach-v2`) sends it ahead of a
+runtime profile (single organization, no callable tools, context-JSON only) and the strict JSON reply contract; it
+adds roughly 6k tokens of input per coach message, priced by your AI provider. The mock provider ignores it.
+
 The **WorkEasy360 Assistant** (`src/components/Agent.js`) is the floating agent on every signed-in page: the robot
 launcher bottom-right opens a side panel with suggested questions, conversation history and guided tours for the
 user's role. It uses the same coach endpoints (`/api/coach/message`, `/api/coach/conversations`), so answers stay
