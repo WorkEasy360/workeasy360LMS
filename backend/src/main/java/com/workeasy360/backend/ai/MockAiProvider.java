@@ -86,35 +86,12 @@ public class MockAiProvider implements AiProvider {
         ArrayNode actions = out.putArray("actions");
         String name = ctx == null ? "there" : ctx.path("learner").path("name").asText("there").split(" ")[0];
         // Instructors and administrators get answers for THEIR panel, not learner recommendations. The offline
-        // provider keeps this deterministic and honest: it explains where each job lives in the product.
+        // provider keeps this deterministic and honest: topics are matched on word stems (so "how to ad an
+        // intructor" still lands on People), and every answer is the real step-by-step in this product.
         if (!"LEARNER".equals(role)) {
             boolean admin = "ADMIN".equals(role);
-            StringBuilder staff = new StringBuilder();
-            if (question.contains("review") || question.contains("submission") || question.contains("assignment")) {
-                staff.append(admin ? "Submissions awaiting feedback are under each course's Assessments view. " : "Open Assessments to see every submission waiting on your feedback, newest first. ")
-                     .append("Reviewing one marks it for the learner and counts as assessed evidence for their skills.");
-            } else if (question.contains("add") || question.contains("invite") || question.contains("people") || question.contains("instructor") || question.contains("password")) {
-                staff.append(admin ? "People is where you add instructors and learners (they get a one-time temporary password), change roles, deactivate accounts and hand out password-reset links."
-                                   : "Adding people is an administrator job (People page). You can assign existing learners to your courses from the course's Learners view.");
-            } else if (question.contains("learner") || question.contains("progress") || question.contains("doing") || question.contains("complete")) {
-                staff.append(admin ? "Analytics shows the whole organisation: completion, assessment scores, skills and per-course funnels, filterable by period. "
-                                   : "Your Learners page lists everyone enrolled in your courses with their progress; Analytics shows per-course funnels and drop-off. ")
-                     .append("Click any course there for its learner-by-learner detail.");
-            } else if (question.contains("course") || question.contains("build") || question.contains("create") || question.contains("publish") || question.contains("quiz")) {
-                staff.append("The Course Builder gives you modules, lessons, videos, quizzes and assignments; \"Create with AI\" drafts a full course you review before publishing. ")
-                     .append(admin ? "As an admin you can edit and publish any course." : "Publish when the readiness checklist is green.");
-            } else if (question.contains("certificat") || question.contains("skill")) {
-                staff.append(admin ? "Certificates are issued automatically on course completion and verified publicly by ID; set your organisation's name and logo for them under Settings. The Skills library and per-skill analytics live under Skills."
-                                   : "Certificates issue automatically when a learner completes your course. Map skills to your lessons in the Builder so completions build measurable skill levels.");
-            } else if (question.contains("setting") || question.contains("automation") || question.contains("notification") || question.contains("email") || question.contains("logo")) {
-                staff.append(admin ? "Settings holds the organisation name, certificate logo, video limits and publishing policy; Automation switches each notification rule on or off. With SMTP configured, notifications also go out by e-mail."
-                                   : "Organisation settings and notification rules are managed by an administrator under Settings and Automation.");
-            } else {
-                staff.append(admin ? "As the administrator, your panel covers People, courses and publishing, the Skills library, Certifications, organisation-wide Analytics, Settings and Automation. "
-                                   : "As an instructor, your panel covers your courses and the Builder, Assessments to review, your Learners' progress and per-course Analytics. ")
-                     .append("Ask me about any of them — reviews, learner progress, building courses, certificates — or take a guided tour from this panel.");
-            }
-            out.put("reply", staff.toString());
+            String reply = staffReply(admin, question);
+            out.put("reply", reply);
             return new Completion(out.toString(), name(), model());
         }
         JsonNode recs = ctx == null ? Json.MAPPER.createArrayNode() : ctx.path("recommendations");
@@ -182,6 +159,57 @@ public class MockAiProvider implements AiProvider {
         out.put("reply", reply.toString());
         return new Completion(out.toString(), name(), model());
     }
+    /** Picks the best staff topic by counting stem hits (typo-tolerant), then answers with the product's real steps. */
+    private static String staffReply(boolean admin, String q) {
+        String[][] topics = {
+            {"onboarding", "start", "set up", "setup", "onboard", "buy", "bought", "purchas", "customer", "company", "begin", "first time", "getting started"},
+            {"people", "instru", "tructor", "teach", "trainer", "invite", "people", "add ", " ad ", "new user", "user", "member", "staff", "account", "passw", "reset", "deactiv", "role", "admin"},
+            {"assign", "assign", "enrol", "enroll", "due date"},
+            {"reviews", "review", "submiss", "grade", "grading", "feedback", "evaluat"},
+            {"analytics", "analyt", "report", "progress", "doing", "complet", "perform", "stats", "funnel", "engag"},
+            {"courses", "cours", "build", "creat", "publish", "lesson", "module", "video", "quiz", "draft", "archive", "content", "ai "},
+            {"certificates", "certif", "skill", "badge", "credential"},
+            {"settings", "setting", "logo", "brand", "automat", "notif", "email", "e-mail", "smtp", "organisation", "organization"},
+        };
+        String padded = " " + q + " ";
+        String best = null; int bestScore = 0;
+        for (String[] t : topics) {
+            int score = 0;
+            for (int i = 1; i < t.length; i++) if (padded.contains(t[i])) score++;
+            if (score > bestScore) { bestScore = score; best = t[0]; }
+        }
+        switch (best == null ? "overview" : best) {
+            case "onboarding": return admin
+                ? "Getting your organisation running takes four steps:\n- 1. Settings: set your organisation's name and upload its logo — both print on every certificate you issue.\n- 2. People → Add person: create your instructors (role Instructor). Each gets a one-time temporary password, or use Edit → Password reset link.\n- 3. Instructors build and publish courses in the Course Builder (or \"Create with AI\").\n- 4. Learners: add them in People, assign them courses, or simply let them register themselves with Create Account on the sign-in page — free published courses are open to every signed-in learner.\nAfter that, Analytics and Automation keep you informed."
+                : "Your starting point as an instructor: build a course in the Course Builder (New course, or \"Create with AI\"), publish it when the readiness checklist is green, then watch your Learners page and review submissions under Assessments.";
+            case "people": return admin
+                ? "To add an instructor (or any person):\n- 1. Open People in the sidebar and press \"Add person\".\n- 2. Enter their name and e-mail, choose the role — Instructor, Learner or Admin — and press Add.\n- 3. You'll be shown a one-time temporary password: hand it to them. (Later you can always open Edit → \"Password reset link\" for a fresh one-time link.)\n- 4. They sign in on this site's normal sign-in page with their e-mail — their panel follows their role automatically.\nFrom the same Edit dialog you change roles, deactivate accounts (they can no longer sign in) and reset passwords."
+                : "Adding people is an administrator's job: they do it under People → Add person and hand over a one-time password. What you can do: open one of your courses → Learners to assign existing learners to it.";
+            case "assign": return admin
+                ? "To assign a course: open the course → Learners → \"Assign learner\", pick the person and optionally a due date. They're enrolled instantly and notified; due dates drive the automatic reminders."
+                : "Open your course → Learners → \"Assign learner\", pick the person and optionally a due date. They're enrolled instantly and notified.";
+            case "reviews": return (admin
+                ? "Submissions awaiting feedback sit under each course's Assessments view. "
+                : "Open Assessments: every submission waiting on your feedback, newest first. ")
+                + "Open one, write your feedback and mark it reviewed — the learner is notified, and the review counts as assessed evidence toward their skills.";
+            case "analytics": return admin
+                ? "Analytics covers the whole organisation: completion, assessment scores, skill development, per-course funnels and learner detail, filterable by period, course and status. The overview also shows coach and AI adoption. For one person, open them under People."
+                : "Your Learners page lists everyone enrolled in your courses with their progress; Analytics has per-course funnels, lesson drop-off and learner-by-learner detail for your courses.";
+            case "courses": return "Course building happens in the Course Builder: modules, then lessons — text, video (upload or YouTube/Vimeo link), quiz or assignment. \"Create with AI\" drafts a whole course for you to review. Set the price on the course (0 = free), map skills to lessons, and publish when the readiness checklist is green."
+                + (admin ? " As admin you can edit, publish, archive or price any course; deleting one with enrolled learners is refused — archive instead." : "");
+            case "certificates": return admin
+                ? "Certificates are issued automatically when a learner completes a course, numbered WE360-… and publicly verifiable by ID or QR code. They print with YOUR organisation's logo and name from Settings. Validity defaults come from Settings; renewals and revocation are under Certifications. Skills: map them to lessons in the Builder; standing and gaps appear under Skills and in Analytics."
+                : "Certificates issue automatically when a learner completes your course — numbered, QR-verifiable, carrying the organisation's branding. Map skills to your lessons in the Builder so completions build measurable skill levels (quizzes count as assessed evidence).";
+            case "settings": return admin
+                ? "Settings holds the organisation name and certificate logo, support e-mail, certificate validity default, video size limit and whether instructors may publish directly. Automation switches each notification rule (enrolments, reminders, reviews, replies, expiry) on or off; with SMTP configured on the server, those notifications also go out by e-mail."
+                : "Organisation settings, branding and notification rules are managed by an administrator under Settings and Automation.";
+            default: return (admin
+                ? "As the administrator, your panel covers People, courses and publishing, the Skills library, Certifications, organisation-wide Analytics, Settings and Automation. "
+                : "As an instructor, your panel covers your courses and the Builder, Assessments to review, your Learners' progress and per-course Analytics. ")
+                + "Ask me how to do any of it — \"how do I add an instructor\", \"assign a course\", \"what needs review\" — or take a guided tour from this panel.";
+        }
+    }
+
     private static void addRecAction(ArrayNode actions, JsonNode rec) {
         ObjectNode a = actions.addObject();
         if (rec.hasNonNull("lessonId") && rec.hasNonNull("courseId")) { a.put("type", "CONTINUE_LESSON"); a.put("label", rec.path("title").asText()); a.put("courseId", rec.path("courseId").asText()); a.put("lessonId", rec.path("lessonId").asText()); }

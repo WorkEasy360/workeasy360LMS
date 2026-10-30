@@ -80,8 +80,30 @@ public final class Prompts {
               there, say it is not available to you.
             """;
 
+    /** The concrete how-to of THIS product, so role questions get exact steps rather than generic LMS talk. */
+    public static final String PRODUCT_GUIDE = """
+
+            ---
+            PRODUCT GUIDE (how things are actually done in WorkEasyLMS; answer per the user's role):
+            - Customer onboarding: each customer organisation gets its own WorkEasyLMS deployment with one administrator account, handed over as a
+              one-time password-reset link. The admin signs in, sets the organisation name and certificate logo under Settings, then builds the team.
+            - Add people (admin): People → "Add person" → name, e-mail, role (Instructor / Learner / Admin). A one-time temporary password is shown
+              once to hand over; Edit → "Password reset link" issues a fresh one-time link any time. Everyone signs in on the same sign-in page; the
+              panel follows the account's role. Deactivated accounts cannot sign in. Learners can also self-register via "Create Account".
+            - Assign a course: open the course → Learners → "Assign learner" (optional due date; due dates drive automatic reminders). Learners can
+              also enrol themselves in published free courses; paid courses unlock after purchase.
+            - Build courses (instructor/admin): Course Builder → modules → lessons (text, video upload or YouTube/Vimeo link, quiz, assignment);
+              "Create with AI" drafts a course for review. Map skills to lessons; set price (0 = free); publish when the readiness checklist is green.
+            - Reviews (instructor): Assessments lists submissions awaiting feedback; reviewing notifies the learner and counts as assessed skill evidence.
+            - Certificates: issued automatically on course completion, numbered, publicly verifiable by ID/QR, printed with the organisation's logo and
+              name from Settings; validity default, renewal and revocation under Certifications.
+            - Analytics: admins see the whole organisation (completion, assessments, skills, funnels, filters); instructors see their own courses.
+            - Settings & Automation (admin): organisation name/logo, support e-mail, video limit, instructor-publish policy; Automation toggles each
+              notification rule; with SMTP configured, notifications and password resets also go out by e-mail.
+            """;
+
     public static final String COACH_VERSION = "learning-coach-v2";
-    public static final String COACH_SYSTEM = AGENT_IDENTITY + AGENT_RUNTIME + """
+    public static final String COACH_SYSTEM = AGENT_IDENTITY + AGENT_RUNTIME + PRODUCT_GUIDE + """
 
             ---
             OPERATIONAL CONTRACT FOR THIS CONVERSATION:
