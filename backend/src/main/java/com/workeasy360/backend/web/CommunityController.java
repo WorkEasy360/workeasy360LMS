@@ -42,7 +42,7 @@ public class CommunityController {
 
     @PostMapping("/comments/{id}/reactions")
     public PostDto reactComment(@AuthenticationPrincipal CurrentUser user, @PathVariable String id, @RequestBody ReactRequest req, @RequestParam String postId) {
-        service.toggleCommentReaction(id, user.getId(), req.type());
+        service.toggleCommentReaction(user.getOrgId(), id, user.getId(), req.type());
         return refetch(user, postId);
     }
 
@@ -58,7 +58,7 @@ public class CommunityController {
 
     @PostMapping("/groups/{id}/toggle-membership")
     public GroupDto toggleMembership(@AuthenticationPrincipal CurrentUser user, @PathVariable String id) {
-        service.toggleMembership(id, user.getId());
+        service.toggleMembership(user.getOrgId(), id, user.getId());
         return service.groups(user.getOrgId()).stream().filter(g -> g.getId().equals(id)).findFirst()
                 .map(g -> CommunityDtos.toGroup(g, service.membersOf(id))).orElseThrow(() -> ApiException.notFound("Group"));
     }

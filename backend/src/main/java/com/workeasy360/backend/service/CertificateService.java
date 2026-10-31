@@ -41,6 +41,14 @@ public class CertificateService {
         this.certificates = certificates; this.courses = courses; this.users = users; this.settings = settings;
     }
 
+    /** A certificate belongs to its course's organization; from any other organization it does not exist. */
+    private Certificate inOrg(com.workeasy360.backend.security.CurrentUser user, String id) {
+        Certificate c = certificates.findById(id).orElseThrow(() -> ApiException.notFound("Certificate"));
+        String org = courses.findById(c.getCourseId()).map(Course::getOrgId).orElse(null);
+        if (org != null && !org.equals(user.getOrgId())) throw ApiException.notFound("Certificate");
+        return c;
+    }
+
     public List<Certificate> forUser(String userId) { return certificates.findByUserId(userId); }
     public List<Certificate> allForOrg(String orgId) {
         Set<String> orgCourses = courses.findByOrgId(orgId).stream().map(Course::getId).collect(Collectors.toSet());
@@ -103,14 +111,14 @@ public class CertificateService {
 
     public Optional<Certificate> verify(String number) { return certificates.findByCertificateNumberIgnoreCase(number.trim()); }
 
-    public void revoke(String id) {
-        Certificate c = certificates.findById(id).orElseThrow(() -> ApiException.notFound("Certificate"));
+    public void revoke(com.workeasy360.backend.security.CurrentUser user, String id) {
+        Certificate c = inOrg(user, id);
         c.setRevoked(true);
         certificates.save(c);
     }
 
     public Certificate renew(com.workeasy360.backend.security.CurrentUser user, String id) {
-        Certificate c = certificates.findById(id).orElseThrow(() -> ApiException.notFound("Certificate"));
+        Certificate c = inOrg(user, id);
         boolean admin = user.getRole() == com.workeasy360.backend.domain.Enums.Role.ADMIN;
         if (!admin && !c.getUserId().equals(user.getId())) throw ApiException.forbidden("Only the certificate's owner or an admin can renew it");
         Course course = courses.findById(c.getCourseId()).orElseThrow(() -> ApiException.notFound("Course"));

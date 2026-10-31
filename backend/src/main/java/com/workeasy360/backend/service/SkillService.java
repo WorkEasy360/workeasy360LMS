@@ -129,6 +129,11 @@ public class SkillService {
     }
 
     // ---------- mappings ----------
+    /** Read-side tenant boundary for a course's skill mappings. */
+    public void requireSameOrgCourse(CurrentUser user, String courseId) {
+        Course c = courses.findById(courseId).orElseThrow(() -> ApiException.notFound("Course"));
+        if (!perm.sameOrg(user, c)) throw ApiException.notFound("Course");
+    }
     private Course editableCourse(CurrentUser user, String courseId) {
         Course c = courses.findById(courseId).orElseThrow(() -> ApiException.notFound("Course"));
         if (!perm.canEditCourse(user, c)) throw ApiException.forbidden("You can map skills only on courses you manage");

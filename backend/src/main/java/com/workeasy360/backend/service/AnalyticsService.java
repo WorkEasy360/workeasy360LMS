@@ -87,6 +87,7 @@ public class AnalyticsService {
         if (u.getRole() == Role.LEARNER) throw ApiException.forbidden("Learner analytics are only available for your own progress");
         if (courseId != null) {
             Course c = courses.findById(courseId).orElseThrow(() -> ApiException.notFound("Course"));
+            if (!perm.sameOrg(u, c)) throw ApiException.notFound("Course");
             if (!perm.canViewAnalytics(u, c)) throw ApiException.forbidden("You can only view analytics for courses you manage");
             return new Scope(List.of(c), false);
         }

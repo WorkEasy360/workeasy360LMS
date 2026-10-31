@@ -47,6 +47,7 @@ public class EnrollmentService {
     /** Self-enrolment (the caller). Free published courses only: a paid course needs a purchase (402) or an assignment. */
     public Enrollment selfEnroll(CurrentUser user, String courseId, Long dueAt) {
         Course c = courseService.get(courseId);
+        if (!perm.sameOrg(user, c)) throw ApiException.notFound("Course"); // another tenant's course does not exist here
         Optional<Enrollment> existing = enrollments.findByUserIdAndCourseId(user.getId(), courseId);
         if (existing.isPresent()) return existing.get();
         if (!perm.canEditCourse(user, c)) {

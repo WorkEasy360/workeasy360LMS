@@ -43,9 +43,11 @@ public class AiService {
     private final AiGenerationRepo generations;
     private final CourseRepo courses; private final ModuleRepo modules; private final LessonRepo lessons;
     private final PermissionService perm;
+    private final com.workeasy360.backend.repo.Repos.UserRepo users;
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AiService.class);
 
-    public AiService(AiProvider provider, AiProperties props, AiGenerationRepo generations, CourseRepo courses, ModuleRepo modules, LessonRepo lessons, PermissionService perm) {
+    public AiService(AiProvider provider, AiProperties props, AiGenerationRepo generations, CourseRepo courses, ModuleRepo modules, LessonRepo lessons, PermissionService perm, com.workeasy360.backend.repo.Repos.UserRepo users) {
+        this.users = users;
         this.provider = provider; this.props = props; this.generations = generations; this.courses = courses; this.modules = modules; this.lessons = lessons; this.perm = perm;
     }
 
@@ -151,9 +153,17 @@ public class AiService {
         throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, failure + ". Nothing was saved — adjust the inputs and try again.");
     }
 
+    /** A generation is visible to its author, and to an admin of the author's own organization — never another tenant's. */
+    private void requireOwnOrOrgAdmin(CurrentUser u, AiGeneration g) {
+        if (g.getUserId().equals(u.getId())) return;
+        boolean sameOrg = users.findById(g.getUserId()).map(o -> u.getOrgId().equals(o.getOrgId())).orElse(false);
+        if (!sameOrg) throw ApiException.notFound("Generation"); // another tenant's draft does not exist here
+        if (!perm.isAdmin(u)) throw ApiException.forbidden("Not your generation");
+    }
+
     public GenerationDto get(CurrentUser u, String id) {
         AiGeneration g = generations.findById(id).orElseThrow(() -> ApiException.notFound("Generation"));
-        if (!g.getUserId().equals(u.getId()) && !perm.isAdmin(u)) throw ApiException.forbidden("Not your generation");
+        requireOwnOrOrgAdmin(u, g);
         return GenerationDto.of(g, false);
     }
     /** A user's own generation records (authors: course/quiz drafts; learners: their coach turns). Always own rows only. */
@@ -162,7 +172,7 @@ public class AiService {
     /** Records where a (possibly edited) result was applied by the client through the normal Course Builder sync. */
     public GenerationDto markApplied(CurrentUser u, String id, ApplyRequest req) {
         AiGeneration g = generations.findById(id).orElseThrow(() -> ApiException.notFound("Generation"));
-        if (!g.getUserId().equals(u.getId()) && !perm.isAdmin(u)) throw ApiException.forbidden("Not your generation");
+        requireOwnOrOrgAdmin(u, g);
         if (g.getStatus() != AiGeneration.Status.COMPLETED) throw ApiException.badRequest("Only a completed generation can be applied");
         if (req.courseId() != null) { courses.findById(req.courseId()).ifPresent(c -> { if (!perm.canEditCourse(u, c)) throw ApiException.forbidden("You can only apply to courses you manage"); }); g.setAppliedCourseId(req.courseId()); }
         if (req.lessonId() != null) g.setAppliedLessonId(req.lessonId());
@@ -189,11 +199,11 @@ public class AiService {
                     Lesson l = lessons.findById(s.lessonId()).orElseThrow(() -> ApiException.notFound("Lesson"));
                     CourseModule m = modules.findById(l.getModuleId()).orElseThrow(() -> ApiException.notFound("Module"));
                     Course c = courses.findById(m.getCourseId()).orElseThrow(() -> ApiException.notFound("Course"));
-                    if (!perm.canEditCourse(u, c) && c.getStatus() != Enums.CourseStatus.PUBLISHED) throw ApiException.forbidden("You can't use that lesson as source material");
+                    if (!perm.sameOrg(u, c) || (!perm.canEditCourse(u, c) && c.getStatus() != Enums.CourseStatus.PUBLISHED)) throw ApiException.forbidden("You can't use that lesson as source material");
                     body = lessonText(l); ref = "lesson:" + l.getId();
                 } else if (s.courseId() != null && !s.courseId().isBlank()) {
                     Course c = courses.findById(s.courseId()).orElseThrow(() -> ApiException.notFound("Course"));
-                    if (!perm.canEditCourse(u, c) && c.getStatus() != Enums.CourseStatus.PUBLISHED) throw ApiException.forbidden("You can't use that course as source material");
+                    if (!perm.sameOrg(u, c) || (!perm.canEditCourse(u, c) && c.getStatus() != Enums.CourseStatus.PUBLISHED)) throw ApiException.forbidden("You can't use that course as source material");
                     StringBuilder sb = new StringBuilder(c.getTitle()).append(". ").append(c.getDescription() == null ? "" : c.getDescription()).append('\n');
                     for (CourseModule m : modules.findByCourseIdOrderByPositionAsc(c.getId())) for (Lesson l : lessons.findByModuleIdOrderByPositionAsc(m.getId())) sb.append(l.getTitle()).append(". ").append(lessonText(l)).append('\n');
                     body = sb.toString(); ref = "course:" + c.getId();

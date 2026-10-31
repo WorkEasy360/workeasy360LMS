@@ -62,11 +62,17 @@ public class OrderService {
     }
 
     public List<PurchaseOrder> mine(CurrentUser user) { return orders.findByUserIdOrderByCreatedAtDesc(user.getId()); }
-    public List<PurchaseOrder> all(CurrentUser user) { if (!perm.isAdmin(user)) throw ApiException.forbidden("Only an admin can list all orders"); return orders.findAllByOrderByCreatedAtDesc(); }
+    public List<PurchaseOrder> all(CurrentUser user) {
+        if (!perm.isAdmin(user)) throw ApiException.forbidden("Only an admin can list all orders");
+        java.util.Set<String> orgCourses = courses.findByOrgId(user.getOrgId()).stream().map(Course::getId).collect(java.util.stream.Collectors.toSet());
+        return orders.findAllByOrderByCreatedAtDesc().stream().filter(o -> orgCourses.contains(o.getCourseId())).toList(); // this organization's sales only
+    }
 
     /** The order, only for its owner or an admin — never for another learner. */
     public PurchaseOrder get(CurrentUser user, String id) {
         PurchaseOrder o = orders.findById(id).orElseThrow(() -> ApiException.notFound("Order"));
+        boolean sameOrg = courses.findById(o.getCourseId()).map(c -> user.getOrgId().equals(c.getOrgId())).orElse(false);
+        if (!sameOrg && !o.getUserId().equals(user.getId())) throw ApiException.notFound("Order"); // another tenant's order does not exist here
         if (!o.getUserId().equals(user.getId()) && !perm.isAdmin(user)) throw ApiException.forbidden("Not your order");
         return o;
     }

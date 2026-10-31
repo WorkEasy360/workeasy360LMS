@@ -234,6 +234,16 @@ docker build -t we360-backend backend/                    # or the multi-stage D
 - `PAYMENTS_PROVIDER` left at `none` until a real provider is implemented and configured; `PAYMENTS_MOCK_ALLOWED`
   must never be `true` outside local development.
 - The demo shortcuts `?as=<role>` and `?selftest=<suite>` only work with the demo accounts; do not deploy `tests/`.
+- `PLATFORM_ADMIN_EMAIL` / `PLATFORM_ADMIN_PASSWORD` (12+ characters) create the WorkEasy360 platform-owner account
+  at startup when none exists (console at `#/platform`). Environment only; nothing is created when they are unset.
+- Real-time updates use Server-Sent Events at `/api/sync/stream`. The backend sends `X-Accel-Buffering: no`, so
+  Nginx passes the stream through unbuffered without config changes. Keep any proxy idle timeout above 30 seconds
+  (the stream sends a heartbeat every 25).
+
+`tools/deploy/remote.sh` is the scripted path for the EC2 host: `inspect` (read-only), `backup` (pg_dump plus a
+verified test-restore), `deploy <sha>`, `verify` (health, routing, data preserved, live SSE through Nginx, payment
+configuration) and `rollback`. Migrations V8 onward are additive with defaults, and Flyway ignores migrations a build
+doesn't know, so rolling back to an older jar needs no database restore.
 
 Deploy the frontend as static files (`index.html`, `src/`) behind any web server/CDN, set
 `window.WE360_API_BASE`, and add the site's origin to `CORS_ORIGINS`. Back up the PostgreSQL database and the

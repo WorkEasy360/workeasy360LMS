@@ -108,8 +108,9 @@ public class CommunityService {
         if (existing.isPresent()) reactions.delete(existing.get());
         else reactions.save(Reaction.builder().postId(postId).userId(userId).type(t).build());
     }
-    public void toggleCommentReaction(String commentId, String userId, String type) {
-        if (!comments.existsById(commentId)) throw ApiException.notFound("Comment");
+    public void toggleCommentReaction(String orgId, String commentId, String userId, String type) {
+        Comment cm = comments.findById(commentId).orElseThrow(() -> ApiException.notFound("Comment"));
+        getPost(orgId, cm.getPostId()); // tenant boundary: the comment's post must be in the caller's organization
         ReactionType t = parseReaction(type);
         var existing = reactions.findByCommentIdAndUserIdAndType(commentId, userId, t);
         if (existing.isPresent()) reactions.delete(existing.get());
@@ -130,7 +131,9 @@ public class CommunityService {
     public List<Group> groups(String orgId) { return groups.findByOrgId(orgId); }
     public List<String> membersOf(String groupId) { return groupMembers.findByGroupId(groupId).stream().map(GroupMember::getUserId).toList(); }
 
-    public void toggleMembership(String groupId, String userId) {
+    public void toggleMembership(String orgId, String groupId, String userId) {
+        Group g = groups.findById(groupId).orElseThrow(() -> ApiException.notFound("Group"));
+        if (g.getOrgId() != null && !g.getOrgId().equals(orgId)) throw ApiException.notFound("Group"); // tenant boundary
         var key = new GroupMember.Key(groupId, userId);
         if (groupMembers.existsById(key)) groupMembers.deleteById(key);
         else groupMembers.save(GroupMember.builder().groupId(groupId).userId(userId).build());

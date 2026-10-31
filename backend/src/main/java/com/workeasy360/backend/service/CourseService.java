@@ -32,13 +32,15 @@ public class CourseService {
     private final LessonRepo lessons;
     private final SettingsRepo settingsRepo;
     private final EntitlementService entitlements;
+    private final com.workeasy360.backend.repo.Repos.UserRepo users;
     private final PermissionService perm;
 
     private final SkillService skillService;
     private final EnrollmentRepo enrollmentRepo;
 
     private final AccessService access;
-    public CourseService(CourseRepo courses, ModuleRepo modules, LessonRepo lessons, SettingsRepo settingsRepo, PermissionService perm, SkillService skillService, EnrollmentRepo enrollmentRepo, AccessService access, EntitlementService entitlements) {
+    public CourseService(CourseRepo courses, ModuleRepo modules, LessonRepo lessons, SettingsRepo settingsRepo, PermissionService perm, SkillService skillService, EnrollmentRepo enrollmentRepo, AccessService access, EntitlementService entitlements, com.workeasy360.backend.repo.Repos.UserRepo users) {
+        this.users = users;
         this.courses = courses; this.modules = modules; this.lessons = lessons; this.settingsRepo = settingsRepo; this.perm = perm; this.skillService = skillService; this.enrollmentRepo = enrollmentRepo; this.access = access; this.entitlements = entitlements;
     }
 
@@ -130,11 +132,21 @@ public class CourseService {
 
     // ---------- write: course ----------
     public void requireEditable(CurrentUser user, Course c) {
+        if (!perm.sameOrg(user, c)) throw ApiException.notFound("Course"); // another tenant's course does not exist here
         if (!perm.canEditCourse(user, c)) throw ApiException.forbidden("You can edit only your own courses");
     }
 
     public Course create(CurrentUser user, String id, String title) {
         if (!perm.canCreateCourse(user)) throw ApiException.forbidden("You don't have permission to create courses");
+        if (id != null && !id.isBlank()) {
+            // The client proposes the id (local-first sync re-pushes after a reload). JPA save() would silently MERGE
+            // into an existing row, handing someone else's course to the caller, so an existing id is resolved here.
+            var existing = courses.findById(id);
+            if (existing.isPresent()) {
+                if (perm.canEditCourse(user, existing.get())) return existing.get();
+                throw ApiException.conflict("That course id is already in use");
+            }
+        }
         entitlements.requireCourseCapacity(user.getOrgId()); // subscription plan course limit
         Course c = Course.builder()
                 .id(id).title(title == null ? "" : title).description("").category("Sales").level("Beginner")
@@ -169,6 +181,9 @@ public class CourseService {
         if (!perm.canAssignInstructor(user)) throw ApiException.forbidden("Only an admin can assign instructors");
         Course c = get(id);
         if (!perm.sameOrg(user, c)) throw ApiException.notFound("Course");
+        var instructor = users.findById(instructorId == null ? "" : instructorId).orElseThrow(() -> ApiException.notFound("User"));
+        if (!user.getOrgId().equals(instructor.getOrgId())) throw ApiException.notFound("User"); // only someone in this organization can own its course
+        if (instructor.getRole() == Role.LEARNER) throw ApiException.badRequest("Choose an instructor or admin to own the course");
         c.setInstructorId(instructorId);
         return courses.save(c);
     }
@@ -223,6 +238,7 @@ public class CourseService {
 
     public void delete(CurrentUser user, String id) {
         Course c = get(id);
+        if (!perm.sameOrg(user, c)) throw ApiException.notFound("Course");
         if (!perm.isAdmin(user)) throw ApiException.forbidden("Only an admin can delete a course");
         // Learning history is never destroyed by a delete: a course with enrolments (progress, certificates) is archived instead.
         if (!enrollmentRepo.findByCourseId(id).isEmpty()) throw ApiException.conflict("This course has enrolled learners — archive it instead to keep their progress and certificates");
@@ -236,7 +252,11 @@ public class CourseService {
         Course c = get(courseId); requireEditable(user, c);
         if (id != null) { // client-supplied id already known (a retried / overlapping sync): idempotent
             java.util.Optional<CourseModule> existing = modules.findById(id);
-            if (existing.isPresent()) { if (title != null && !title.isBlank()) existing.get().setTitle(title); return modules.save(existing.get()); }
+            if (existing.isPresent()) {
+                if (!courseId.equals(existing.get().getCourseId())) throw ApiException.conflict("That module id is already in use");
+                if (title != null && !title.isBlank()) existing.get().setTitle(title);
+                return modules.save(existing.get());
+            }
         }
         int position = modules.findByCourseIdOrderByPositionAsc(courseId).size();
         CourseModule m = CourseModule.builder().id(id).courseId(courseId)
@@ -274,7 +294,11 @@ public class CourseService {
     public Lesson addLesson(CurrentUser user, String moduleId, String id, String title, String type) {
         CourseModule m = modules.findById(moduleId).orElseThrow(() -> ApiException.notFound("Module"));
         requireEditable(user, get(m.getCourseId()));
-        if (id != null && lessons.findById(id).isPresent()) return lessons.findById(id).get(); // idempotent re-add
+        if (id != null && lessons.findById(id).isPresent()) { // idempotent re-add, never across modules
+            Lesson existing = lessons.findById(id).get();
+            if (!moduleId.equals(existing.getModuleId())) throw ApiException.conflict("That lesson id is already in use");
+            return existing;
+        }
         LessonType lt = parseType(type);
         int position = lessons.findByModuleIdOrderByPositionAsc(moduleId).size();
         Lesson.LessonBuilder b = Lesson.builder().id(id).moduleId(moduleId)
@@ -315,6 +339,10 @@ public class CourseService {
         Lesson l = lessons.findById(lessonId).orElseThrow(() -> ApiException.notFound("Lesson"));
         CourseModule from = modules.findById(l.getModuleId()).orElseThrow(() -> ApiException.notFound("Module"));
         requireEditable(user, get(from.getCourseId()));
+        if (!l.getModuleId().equals(toModuleId)) {
+            CourseModule to = modules.findById(toModuleId).orElseThrow(() -> ApiException.notFound("Module"));
+            requireEditable(user, get(to.getCourseId()));
+        }
         List<Lesson> fromList = new ArrayList<>(lessons.findByModuleIdOrderByPositionAsc(l.getModuleId()));
         fromList.removeIf(x -> x.getId().equals(lessonId));
         for (int i = 0; i < fromList.size(); i++) fromList.get(i).setPosition(i);

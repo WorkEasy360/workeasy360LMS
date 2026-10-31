@@ -14,7 +14,8 @@ import java.util.List;
 public class SkillController {
     private final SkillService service;
     private final PermissionService perm;
-    public SkillController(SkillService service, PermissionService perm) { this.service = service; this.perm = perm; }
+    private final com.workeasy360.backend.repo.Repos.UserRepo users;
+    public SkillController(SkillService service, PermissionService perm, com.workeasy360.backend.repo.Repos.UserRepo users) { this.service = service; this.perm = perm; this.users = users; }
 
     // ---- library (everyone can read; admin writes) ----
     @GetMapping("/api/skills")
@@ -41,12 +42,12 @@ public class SkillController {
 
     // ---- mappings ----
     @GetMapping("/api/courses/{courseId}/skills")
-    public List<CourseSkillDto> courseSkills(@PathVariable String courseId) { return service.courseSkills(courseId); }
+    public List<CourseSkillDto> courseSkills(@AuthenticationPrincipal CurrentUser user, @PathVariable String courseId) { service.requireSameOrgCourse(user, courseId); return service.courseSkills(courseId); }
     @PutMapping("/api/courses/{courseId}/skills")
     public List<CourseSkillDto> setCourseSkills(@AuthenticationPrincipal CurrentUser user, @PathVariable String courseId, @RequestBody List<CourseSkillDto> body) { return service.setCourseSkills(user, courseId, body); }
 
     @GetMapping("/api/lessons/{lessonId}/skills")
-    public List<LessonSkillDto> lessonSkills(@PathVariable String lessonId) { return service.lessonSkills(lessonId); }
+    public List<LessonSkillDto> lessonSkills(@AuthenticationPrincipal CurrentUser user, @PathVariable String lessonId) { service.requireSameOrgCourse(user, service.courseIdOfLesson(lessonId)); return service.lessonSkills(lessonId); }
     @PutMapping("/api/lessons/{lessonId}/skills")
     public List<LessonSkillDto> setLessonSkills(@AuthenticationPrincipal CurrentUser user, @PathVariable String lessonId, @RequestBody List<LessonSkillDto> body) { return service.setLessonSkills(user, lessonId, body); }
 
@@ -58,6 +59,7 @@ public class SkillController {
     @GetMapping("/api/users/{userId}/skills")
     public List<UserSkillDto> forUser(@AuthenticationPrincipal CurrentUser user, @PathVariable String userId) {
         if (!perm.isAdmin(user) && user.getRole() != com.workeasy360.backend.domain.Enums.Role.INSTRUCTOR && !user.getId().equals(userId)) throw ApiException.forbidden("Not allowed");
+        if (!user.getId().equals(userId) && !users.findById(userId).map(t -> user.getOrgId().equals(t.getOrgId())).orElse(false)) throw ApiException.notFound("User");
         return service.userSkills(userId);
     }
 

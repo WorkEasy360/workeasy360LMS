@@ -30,9 +30,10 @@ public class VideoService {
     private final PermissionService perm;
 
     private final AccessService access;
+    private final com.workeasy360.backend.repo.Repos.UserRepo users;
     public VideoService(VideoRepo videos, CourseRepo courses, EnrollmentRepo enrollments, SettingsRepo settingsRepo,
-                         VideoStorageService storage, PermissionService perm, AccessService access) {
-        this.access = access;
+                         VideoStorageService storage, PermissionService perm, AccessService access, com.workeasy360.backend.repo.Repos.UserRepo users) {
+        this.access = access; this.users = users;
         this.videos = videos; this.courses = courses; this.enrollments = enrollments;
         this.settingsRepo = settingsRepo; this.storage = storage; this.perm = perm;
     }
@@ -40,7 +41,9 @@ public class VideoService {
     public Video get(String id) { return videos.findById(id).orElseThrow(() -> ApiException.notFound("Video")); }
 
     private void requireCourseEdit(CurrentUser user, String courseId) {
-        if (courseId == null) return;
+        if (courseId == null) return; // uploading into the caller's own library
+        Course c0 = courses.findById(courseId).orElseThrow(() -> ApiException.notFound("Course"));
+        if (!perm.sameOrg(user, c0)) throw ApiException.notFound("Course");
         Course c = courses.findById(courseId).orElseThrow(() -> ApiException.notFound("Course"));
         if (!perm.canEditCourse(user, c)) throw ApiException.forbidden("You can only add videos to your own courses");
     }
@@ -100,6 +103,7 @@ public class VideoService {
     public Video updateMeta(CurrentUser user, String id, String title, String description, String visibility) {
         Video v = get(id);
         requireCourseEdit(user, v.getCourseId());
+        requireLibraryEdit(user, v);
         if (title != null) v.setTitle(title.length() > 300 ? title.substring(0, 300) : title);
         if (description != null) v.setDescription(description);
         if (visibility != null) {
@@ -112,6 +116,7 @@ public class VideoService {
     public void delete(CurrentUser user, String id) {
         Video v = get(id);
         requireCourseEdit(user, v.getCourseId());
+        requireLibraryEdit(user, v);
         storage.delete(v.getStorageKey());
         storage.delete(v.getThumbnailKey());
         videos.delete(v);
@@ -119,10 +124,22 @@ public class VideoService {
 
     /** Mirrors the frontend's videoAccess(): admin, the course's instructor, or a learner enrolled in a published course. */
     public boolean canAccess(CurrentUser user, Video v) {
-        if (v.getCourseId() == null) return true;
+        if (v.getCourseId() == null) return sameOrgAsOwner(user, v); // a library video: its owner's organization only
         Course c = courses.findById(v.getCourseId()).orElse(null);
         if (c == null) return false;
         return access.canAccessContent(user, c); // editors, entitled learners, or anyone on a free published course
+    }
+
+    /** A video not attached to a course belongs to its owner's organization. */
+    private boolean sameOrgAsOwner(CurrentUser user, Video v) {
+        return users.findById(v.getOwnerId()).map(o -> user.getOrgId().equals(o.getOrgId())).orElse(false);
+    }
+
+    /** Library (course-less) videos: only their owner, or an admin of the owner's organization, may change them. */
+    private void requireLibraryEdit(CurrentUser user, Video v) {
+        if (v.getCourseId() != null) return; // course videos are governed by requireCourseEdit
+        if (!sameOrgAsOwner(user, v)) throw ApiException.notFound("Video");
+        if (!v.getOwnerId().equals(user.getId()) && !perm.isAdmin(user)) throw ApiException.forbidden("Only the video's owner can change it");
     }
 
     private String cleanTitle(String fileName) {

@@ -32,7 +32,7 @@ public class CertificateController {
     @PostMapping("/{id}/revoke")
     public void revoke(@AuthenticationPrincipal CurrentUser user, @PathVariable String id) {
         if (!perm.isAdmin(user)) throw ApiException.forbidden("Only an admin can revoke a certificate");
-        service.revoke(id);
+        service.revoke(user, id);
     }
 
     @PostMapping("/{id}/renew")

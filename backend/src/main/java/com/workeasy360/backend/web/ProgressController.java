@@ -17,8 +17,8 @@ public class ProgressController {
     public CompletionResult update(@AuthenticationPrincipal CurrentUser user, @PathVariable String lessonId, @RequestBody ProgressUpdateRequest req) {
         // Two saves for the same lesson can race (a periodic save and the page-unload save): the loser hits the
         // (user, lesson) unique key. Retrying once re-reads the row the winner created; nothing is lost.
-        try { return service.update(user.getId(), user.getRole(), lessonId, req); }
-        catch (org.springframework.dao.DataIntegrityViolationException e) { return service.update(user.getId(), user.getRole(), lessonId, req); }
+        try { return service.update(user, lessonId, req); }
+        catch (org.springframework.dao.DataIntegrityViolationException e) { return service.update(user, lessonId, req); }
     }
 
     @GetMapping("/api/courses/{courseId}/progress/detail")

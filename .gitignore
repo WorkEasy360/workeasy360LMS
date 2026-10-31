@@ -24,6 +24,7 @@ backend/storage/
 # ---- local portable tooling and database cluster (only env.sh is source) ----
 tools/*
 !tools/env.sh
+!tools/deploy/
 
 # ---- database dumps ----
 *.dump

@@ -84,6 +84,7 @@ public class CourseController {
     // ---- lessons (nested read for convenience) ----
     @PostMapping("/{courseId}/modules/{moduleId}/lessons")
     public CourseTreeDto addLesson(@AuthenticationPrincipal CurrentUser user, @PathVariable String courseId, @PathVariable String moduleId, @RequestBody CreateLessonRequest req) {
+        if (!courseId.equals(service.getModule(moduleId).getCourseId())) throw ApiException.notFound("Module"); // never answer with another course's tree
         service.addLesson(user, moduleId, req.id(), req.title(), req.type());
         return service.tree(courseId);
     }

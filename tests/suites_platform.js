@@ -173,6 +173,136 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     ok(!JSON.stringify(audit).includes("CompanyB123") && !JSON.stringify(audit).includes(resetToken), "the audit log contains no passwords or tokens");
   };
 
+  // Cross-tenant WRITE and IDOR attacks (tenantIsolation covers listings and reads): Company B, holding real ids of
+  // Company A's records, tries every id-taking endpoint. Plus the SSE stream's own security: tickets, single use,
+  // tenant-scoped delivery, metadata-only payloads, and no event for a failed write.
+  suites.tenantIdor = async () => {
+    const BASE = "http://localhost:8080/api";
+    const raw = (path, method = "GET", body, tok) => fetch(BASE + path, { method, headers: { ...(tok && { Authorization: "Bearer " + tok }), "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const j = async (r) => ({ status: r.status, body: await r.json().catch(() => null) });
+    const login = async (email, password) => (await j(await raw("/auth/login", "POST", { email, password }))).body?.token;
+    const stamp = Date.now().toString(36);
+
+    // ---- Company A (default org): a published free course, its module/lesson, a video, an AI draft, a certificate
+    const aTok = await login(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
+    const cA = "c-ida" + stamp;
+    await raw("/courses", "POST", { id: cA, title: "A private course " + stamp }, aTok);
+    const tA = (await j(await raw(`/courses/${cA}/modules`, "POST", { title: "A module" }, aTok))).body;
+    const moduleA = tA.modules[0].id;
+    const tA2 = (await j(await raw(`/courses/${cA}/modules/${moduleA}/lessons`, "POST", { title: "A lesson", type: "LESSON" }, aTok))).body;
+    const lessonA = tA2.modules[0].lessons[0].id;
+    ok((await raw(`/courses/${cA}/publish`, "POST", undefined, aTok)).ok, "setup: Company A has a published free course");
+    const vA = (await j(await raw(`/videos/external?courseId=${cA}`, "POST", { sourceType: "youtube", sourceUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", title: "A video" }, aTok))).body;
+    ok(!!vA?.id, "setup: Company A has a video");
+    const genA = (await j(await raw("/ai/quiz/generate", "POST", { context: "A internal process", objectives: ["x"], count: 3 }, aTok))).body;
+    const certA = ((await j(await raw("/certificates?all=true", "GET", undefined, aTok))).body || []).find((c) => c.status !== "REVOKED");
+    const postA = (await j(await raw("/community/posts", "POST", { kind: "discussion", title: "A thread " + stamp, body: "A only" }, aTok))).body;
+    const commentA = (await j(await raw(`/community/posts/${postA.id}/comments`, "POST", { id: "cm-ida" + stamp, body: "A comment" }, aTok))).body?.comments?.[0];
+    const groupA = ((await j(await raw("/community/groups", "GET", undefined, aTok))).body || [])[0];
+
+    // ---- Company B: provisioned through the public flow, with its own learner and published course
+    const bEmail = `admin.${stamp}@idor-b.dev`;
+    const reg = (await j(await raw("/public/organizations", "POST", { company: "IDOR B " + stamp, adminName: "B Admin", adminEmail: bEmail }))).body;
+    const bTok = (await j(await raw("/auth/reset", "POST", { token: reg.resetPath.split("/").pop(), password: "IdorBee123" }))).body.token;
+    const bLearnerEmail = `learner.${stamp}@idor-b.dev`;
+    await raw("/users", "POST", { name: "B Learner", email: bLearnerEmail, role: "learner", password: "IdorLearn123" }, bTok);
+    const blTok = await login(bLearnerEmail, "IdorLearn123");
+    const cB = "c-idb" + stamp;
+    await raw("/courses", "POST", { id: cB, title: "B course" }, bTok);
+    const tB = (await j(await raw(`/courses/${cB}/modules`, "POST", { title: "B module" }, bTok))).body;
+    const moduleB = tB.modules[0].id;
+    const tB2 = (await j(await raw(`/courses/${cB}/modules/${moduleB}/lessons`, "POST", { title: "B lesson", type: "LESSON" }, bTok))).body;
+    const lessonB = tB2.modules[0].lessons[0].id;
+    await raw(`/courses/${cB}/publish`, "POST", undefined, bTok);
+    ok(!!blTok && !!lessonB, "setup: Company B has an admin, a learner and a published course");
+
+    // ---- a tenant's own learner can learn (this was broken: progress checked access against the default org)
+    ok((await raw(`/courses/${cB}/enroll`, "POST", {}, blTok)).status === 200, "Company B's learner enrols in Company B's own free course");
+    ok((await raw(`/lessons/${lessonB}/progress`, "POST", { complete: true }, blTok)).status === 200, "Company B's learner records progress in their own course");
+
+    // ---- learning writes across the boundary
+    ok((await raw(`/lessons/${lessonA}/progress`, "POST", { complete: true }, blTok)).status === 404, "B's learner cannot write progress into Company A's lesson (404)");
+    ok((await raw(`/courses/${cA}/enroll`, "POST", {}, blTok)).status === 404, "B's learner cannot self-enrol in Company A's course (404)");
+    const bLearnerId = (await j(await raw("/auth/me", "GET", undefined, blTok))).body.id;
+    const aLearners = (await j(await raw(`/courses/${cA}/learners`, "GET", undefined, aTok))).body || [];
+    ok(!aLearners.some((e) => e.userId === bLearnerId), "no Company B learner ever lands in Company A's course roster");
+
+    // ---- course structure across the boundary
+    ok((await raw("/courses", "POST", { id: cA, title: "taken over" }, bTok)).status === 409, "B cannot take over Company A's course by re-using its id (409)");
+    const aAfter = (await j(await raw(`/courses/${cA}`, "GET", undefined, aTok))).body;
+    ok(aAfter?.title === "A private course " + stamp && aAfter?.instructorId === "u-priya", "Company A's course is unchanged after the takeover attempt");
+    ok((await raw(`/courses/${cB}/modules`, "POST", { id: moduleA, title: "renamed by B" }, bTok)).status === 409, "B cannot rename Company A's module by re-using its id (409)");
+    ok((await raw(`/lessons/${lessonB}/move`, "POST", { toModuleId: moduleA, toIndex: 0 }, bTok)).status === 404, "B cannot move a lesson into Company A's module (404)");
+    ok((await raw(`/courses/${cA}/modules/${moduleB}/lessons`, "POST", { title: "x", type: "LESSON" }, bTok)).status === 404, "a mismatched course id in the lesson route never returns Company A's tree (404)");
+    const aTreeNow = (await j(await raw(`/courses/${cA}`, "GET", undefined, aTok))).body;
+    ok(aTreeNow.modules[0].title === "A module" && aTreeNow.modules[0].lessons.length === 1, "Company A's modules and lessons are intact");
+    ok((await raw(`/courses/${cA}`, "DELETE", undefined, bTok)).status === 404, "B's admin cannot delete Company A's course (404)");
+    ok((await raw(`/courses/${cA}`, "GET", undefined, aTok)).status === 200, "Company A's course still exists");
+    ok((await raw(`/courses/${cB}/assign-instructor`, "POST", { instructorId: "u-daniel" }, bTok)).status === 404, "B cannot hand its course to a Company A instructor (404)");
+    const bAdminId = (await j(await raw("/auth/me", "GET", undefined, bTok))).body.id;
+    ok((await raw(`/courses/${cA}/assign-instructor`, "POST", { instructorId: bAdminId }, aTok)).status === 404, "A cannot hand its course to a Company B person (404)");
+
+    // ---- certificates, videos, orders, access info, skills, AI, community, analytics
+    if (certA) {
+      ok((await raw(`/certificates/${certA.id}/revoke`, "POST", undefined, bTok)).status === 404, "B's admin cannot revoke a Company A certificate (404)");
+      ok((await raw(`/certificates/${certA.id}/renew`, "POST", undefined, bTok)).status === 404, "B's admin cannot renew a Company A certificate (404)");
+      const still = ((await j(await raw("/certificates?all=true", "GET", undefined, aTok))).body || []).find((c) => c.id === certA.id);
+      ok(still && still.status !== "REVOKED", "the Company A certificate is still valid");
+    }
+    ok((await raw(`/videos/${vA.id}`, "GET", undefined, bTok)).status === 404, "B cannot read Company A's video metadata (404)");
+    ok([403, 404].includes((await raw(`/videos/${vA.id}/stream`, "GET", undefined, bTok)).status), "B cannot stream Company A's video");
+    ok((await raw(`/videos/${vA.id}/thumbnail`, "GET", undefined, bTok)).status === 404, "B cannot fetch Company A's video thumbnail (404)");
+    ok((await raw(`/videos/${vA.id}`, "PUT", { title: "pwned" }, bTok)).status === 404, "B cannot edit Company A's video (404)");
+    ok((await raw(`/videos/${vA.id}`, "DELETE", undefined, bTok)).status === 404, "B cannot delete Company A's video (404)");
+    ok((await raw(`/videos/${vA.id}`, "GET", undefined, aTok)).status === 200, "Company A's video is intact");
+    const bOrders = (await j(await raw("/orders?all=true", "GET", undefined, bTok))).body || [];
+    ok(bOrders.every((o) => o.courseId === cB), `B's admin sees only Company B's orders (${bOrders.length})`);
+    ok((await raw(`/courses/${cA}/access`, "GET", undefined, blTok)).status === 404, "Company A's course price/access does not exist for Company B (404)");
+    ok((await raw("/users/u-maya/skills", "GET", undefined, bTok)).status === 404, "B's admin cannot read a Company A learner's skills (404)");
+    ok((await raw(`/courses/${cA}/skills`, "GET", undefined, bTok)).status === 404, "B cannot read Company A's course-skill mapping (404)");
+    ok((await raw(`/lessons/${lessonA}/skills`, "GET", undefined, bTok)).status === 404, "B cannot read Company A's lesson-skill mapping (404)");
+    if (genA?.id) ok((await raw(`/ai/generations/${genA.id}`, "GET", undefined, bTok)).status === 404, "B's admin cannot read Company A's AI draft (404)");
+    const steal = await raw("/ai/course/generate", "POST", { topic: "Steal", objectives: ["x"], sources: [{ kind: "lms", courseId: cA }] }, bTok);
+    ok(steal.status === 403, "B cannot feed Company A's published course into its own AI generation (403)");
+    if (commentA) ok((await raw(`/community/comments/${commentA.id}/reactions?postId=${postA.id}`, "POST", { type: "like" }, bTok)).status === 404, "B cannot react to a Company A comment (404)");
+    if (groupA) ok((await raw(`/community/groups/${groupA.id}/toggle-membership`, "POST", undefined, bTok)).status === 404, "B cannot join a Company A community group (404)");
+    ok((await raw(`/analytics/courses/${cA}`, "GET", undefined, bTok)).status === 404, "B cannot read Company A's course analytics (404)");
+    const coach = await raw("/coach/message", "POST", { text: "summarise this", lessonId: lessonA }, blTok);
+    ok(coach.status === 403, "the AI coach refuses to load a Company A lesson into Company B's conversation (403)");
+
+    // ---- SSE stream security
+    ok((await raw("/sync/ticket", "POST")).status === 401, "a stream ticket requires sign-in (401)");
+    ok((await fetch(BASE + "/sync/stream")).status === 401, "the stream refuses a request without a ticket (401)");
+    ok((await fetch(BASE + "/sync/stream?ticket=not-a-real-ticket")).status === 401, "the stream refuses a forged ticket (401)");
+    const openStream = async (tok) => {
+      const t = (await j(await raw("/sync/ticket", "POST", undefined, tok))).body.ticket;
+      const ctrl = new AbortController();
+      const res = await fetch(`${BASE}/sync/stream?ticket=${encodeURIComponent(t)}`, { signal: ctrl.signal });
+      const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+      (async () => { try { for (;;) { const { value, done } = await reader.read(); if (done) break; buf += dec.decode(value); } } catch {} })();
+      return { ticket: t, status: res.status, text: () => buf, close: () => ctrl.abort() };
+    };
+    const aStream = await openStream(aTok), bStream = await openStream(bTok);
+    ok(aStream.status === 200 && bStream.status === 200, "each tenant opens its own stream with a fresh ticket");
+    ok((await fetch(`${BASE}/sync/stream?ticket=${encodeURIComponent(aStream.ticket)}`)).status === 401, "a ticket works only once (replay refused, 401)");
+    await sleep(800);
+    const before = aStream.text().length;
+    ok((await raw("/users", "POST", { name: "x", email: "not-an-email", role: "learner" }, aTok)).status === 400, "setup: a failing write (400)");
+    await sleep(1500);
+    ok(!aStream.text().slice(before).includes("event:sync"), "a failed write emits no event");
+    await raw(`/courses/${cA}`, "PUT", { description: "touched " + stamp }, aTok);
+    await waitFor(() => aStream.text().includes("event:sync"), 8000, "A's own stream gets A's event");
+    await sleep(1500);
+    ok(aStream.text().includes('"type":"courses"'), "Company A's stream receives Company A's course event");
+    ok(!bStream.text().includes("event:sync"), "Company B's stream receives nothing from Company A's activity");
+    const evt = JSON.parse((aStream.text().split("event:sync\ndata:")[1] || "{}").split("\n")[0] || "{}");
+    ok(JSON.stringify(Object.keys(evt).sort()) === JSON.stringify(["actorId", "at", "id", "type"]), "events carry metadata only (id, type, actor, time) — never records");
+    aStream.close(); bStream.close();
+
+    // tidy: Company A's test course (B's org stays as an inert trial tenant)
+    await raw(`/courses/${cA}`, "DELETE", undefined, aTok);
+  };
+
   // Password reset: self-service request, admin-issued link, single use, expiry of old links, and the two public pages.
   suites.passwordReset = async () => {
     await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);

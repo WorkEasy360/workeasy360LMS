@@ -35,6 +35,7 @@ public class OrderController {
     @GetMapping("/api/courses/{id}/access")
     public AccessDto courseAccess(@AuthenticationPrincipal CurrentUser u, @PathVariable String id) {
         Course c = courses.findById(id).orElseThrow(() -> ApiException.notFound("Course"));
+        if (c.getOrgId() != null && !c.getOrgId().equals(u.getOrgId())) throw ApiException.notFound("Course");
         Enrollment e = access.entitlement(u, c).orElse(null);
         boolean free = AccessService.isFree(c), can = access.canAccessContent(u, c);
         String pending = service.mine(u).stream().filter(o -> o.getCourseId().equals(id) && o.getStatus().name().equals("PENDING")).map(PurchaseOrder::getId).findFirst().orElse(null);

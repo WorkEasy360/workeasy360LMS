@@ -42,10 +42,11 @@ public class ProgressService {
                 .percentage(0).lastPosition(0d).watchPercentage(0d).videoCompleted(false).build());
     }
 
-    public CompletionResult update(String userId, com.workeasy360.backend.domain.Enums.Role role, String lessonId, ProgressUpdateRequest req) {
+    public CompletionResult update(com.workeasy360.backend.security.CurrentUser user, String lessonId, ProgressUpdateRequest req) {
+        String userId = user.getId();
         Lesson lesson = lessons.findById(lessonId).orElseThrow(() -> ApiException.notFound("Lesson"));
         String courseId = courseService.getModule(lesson.getModuleId()).getCourseId();
-        access.requireContentAccess(new com.workeasy360.backend.security.CurrentUser(userId, role, com.workeasy360.backend.security.CurrentUser.DEFAULT_ORG), courseId); // paid courses need an entitlement; a free course enrols on first progress
+        access.requireContentAccess(user, courseId); // paid courses need an entitlement; a free course enrols on first progress
         Enrollment enrollment = enrollments.findByUserIdAndCourseId(userId, courseId)
                 .orElseGet(() -> enrollments.save(Enrollment.builder().userId(userId).courseId(courseId)
                         .status(Enums.EnrollmentStatus.IN_PROGRESS).enrolledAt(Instant.now()).startedAt(Instant.now())

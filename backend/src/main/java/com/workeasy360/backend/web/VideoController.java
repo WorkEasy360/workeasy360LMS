@@ -47,7 +47,11 @@ public class VideoController {
     }
 
     @GetMapping("/{id}")
-    public VideoDto get(@PathVariable String id) { return VideoDto.of(service.get(id)); }
+    public VideoDto get(@AuthenticationPrincipal CurrentUser user, @PathVariable String id) {
+        Video v = service.get(id);
+        if (!service.canAccess(user, v)) throw ApiException.notFound("Video"); // same rule as streaming the bytes
+        return VideoDto.of(v);
+    }
 
     @PutMapping("/{id}")
     public VideoDto update(@AuthenticationPrincipal CurrentUser user, @PathVariable String id, @RequestBody UpdateVideoRequest req) {
@@ -87,6 +91,7 @@ public class VideoController {
     @GetMapping("/{id}/thumbnail")
     public ResponseEntity<byte[]> thumbnail(@AuthenticationPrincipal CurrentUser user, @PathVariable String id) throws IOException {
         Video v = service.get(id);
+        if (user == null || !service.canAccess(user, v)) return ResponseEntity.notFound().build();
         if (v.getThumbnailKey() == null || !storage.exists(v.getThumbnailKey())) return ResponseEntity.notFound().build();
         byte[] bytes = Files.readAllBytes(storage.resolve(v.getThumbnailKey()));
         return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG).header(HttpHeaders.CACHE_CONTROL, "private, max-age=86400").body(bytes);

@@ -26,7 +26,11 @@ public class SyncController {
     }
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@RequestParam(required = false) String ticket) {
+    public SseEmitter stream(@RequestParam(required = false) String ticket, jakarta.servlet.http.HttpServletResponse response) {
+        // Nginx buffers proxied responses by default, which would hold events back until a buffer fills; this tells
+        // it (and similar proxies) to pass this one response straight through, without touching the proxy config.
+        response.setHeader("X-Accel-Buffering", "no");
+        response.setHeader("Cache-Control", "no-cache");
         SseEmitter emitter = sync.connect(ticket);
         if (emitter == null) throw new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Invalid or expired stream ticket");
         return emitter;
