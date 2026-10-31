@@ -242,8 +242,15 @@ docker build -t we360-backend backend/                    # or the multi-stage D
 
 `tools/deploy/remote.sh` is the scripted path for the EC2 host: `inspect` (read-only), `backup` (pg_dump plus a
 verified test-restore), `deploy <sha>`, `verify` (health, routing, data preserved, live SSE through Nginx, payment
-configuration) and `rollback`. Migrations V8 onward are additive with defaults, and Flyway ignores migrations a build
-doesn't know, so rolling back to an older jar needs no database restore.
+configuration, e-mail) and `rollback`. Migrations V8 onward are additive with defaults, and Flyway ignores migrations a build
+doesn't know, so rolling back to an older jar needs no database restore. `set-env` reads `KEY=VALUE` lines on stdin
+and writes them into the server's env file without printing values (only `SMTP_*`, `APP_PUBLIC_URL` and
+`PLATFORM_ADMIN_*` are accepted), e.g. the SMTP block from your local `backend/.env`:
+`grep '^SMTP_' backend/.env | ssh <host> 'sudo bash /tmp/remote.sh set-env'`, plus
+`echo APP_PUBLIC_URL=https://learn.workeasy360.com | ssh <host> 'sudo bash /tmp/remote.sh set-env'`.
+
+The regression runner refuses to run against a backend that sends real e-mail (the suites create people with made-up
+addresses); start the backend with `SMTP_HOST=` for test runs.
 
 Deploy the frontend as static files (`index.html`, `src/`) behind any web server/CDN, set
 `window.WE360_API_BASE`, and add the site's origin to `CORS_ORIGINS`. Back up the PostgreSQL database and the

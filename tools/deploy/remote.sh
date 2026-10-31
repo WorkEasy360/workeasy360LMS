@@ -5,6 +5,7 @@
 #   sudo bash remote.sh backup                  pg_dump + verified test-restore into a throwaway database; records data counts
 #   sudo bash remote.sh deploy <sha>            install /tmp/backend-<sha>.jar (+ .sha256) and frontend at <sha>; restart backend
 #   sudo bash remote.sh verify                  health, routing, Flyway, data preserved, auth, SSE through Nginx, payment config
+#   sudo bash remote.sh set-env < settings      add/replace KEY=VALUE lines (SMTP_*, APP_PUBLIC_URL, PLATFORM_ADMIN_*) in the env file
 #   sudo bash remote.sh rollback                previous jar + previous frontend (schema changes are additive: no data restore)
 #   sudo bash remote.sh restore-db <dumpfile>   LAST RESORT: restore a dump into a new database and swap it in (old one kept)
 #
@@ -150,7 +151,41 @@ verify() {
     unset token ticket out
   else echo "SKIP: PLATFORM_ADMIN_EMAIL / PLATFORM_ADMIN_PASSWORD not set in $ENV_FILE"; fi
 
+  say "e-mail"
+  if [ -n "${SMTP_HOST:-}" ]; then
+    local started; started=$(systemctl show -p ActiveEnterTimestamp --value $SERVICE)
+    check "server reaches $SMTP_HOST:${SMTP_PORT:-587}" "timeout 10 bash -c '</dev/tcp/$SMTP_HOST/${SMTP_PORT:-587}' 2>/dev/null"
+    check "backend loaded the SMTP settings" "journalctl -u $SERVICE --since \"$started\" --no-pager | grep -q 'Outgoing e-mail enabled'"
+    check "links in e-mails point at an https address" "[[ \"${APP_PUBLIC_URL:-}\" == https://* ]]"
+  else echo "SKIP: SMTP_HOST not set — admins hand reset links over themselves"; fi
+
   say "result"; [ $fails = 0 ] && echo "ALL CHECKS PASSED" || { echo "$fails CHECK(S) FAILED"; exit 1; }
+}
+
+# Reads KEY=VALUE lines from stdin and writes them into the env file, replacing earlier (or commented-out) lines for
+# the same key. Only the settings named here can be changed this way; values are never printed. Takes effect at the
+# next backend restart (deploy restarts it).
+SETTABLE="SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM SMTP_SSL SMTP_STARTTLS APP_PUBLIC_URL PLATFORM_ADMIN_EMAIL PLATFORM_ADMIN_PASSWORD"
+set_env() {
+  [ -t 0 ] && { echo "pipe KEY=VALUE lines in on stdin"; exit 1; }
+  umask 077
+  local tmp line key keys=""; tmp=$(mktemp "$ENV_FILE.new.XXXXXX")
+  cat "$ENV_FILE" > "$tmp"
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%$'\r'}
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    key=${line%%=*}
+    if [[ "$line" != *=* || " $SETTABLE " != *" $key "* ]]; then echo "refused: '${key:0:40}' is not a setting this command manages — nothing changed"; rm -f "$tmp"; exit 1; fi
+    grep -v -E "^#?[[:space:]]*$key=" "$tmp" > "$tmp.f" || true
+    printf '%s\n' "$line" >> "$tmp.f"; mv "$tmp.f" "$tmp"
+    keys="$keys $key"
+  done
+  [ -n "$keys" ] || { echo "no KEY=VALUE lines on stdin — nothing changed"; rm -f "$tmp"; exit 1; }
+  cp -p "$ENV_FILE" "$ENV_FILE.bak-$(date -u +%Y%m%dT%H%M%SZ)"
+  chown --reference="$ENV_FILE" "$tmp"; chmod --reference="$ENV_FILE" "$tmp"
+  mv "$tmp" "$ENV_FILE"
+  echo "set:$keys (values not shown; previous file kept as $ENV_FILE.bak-*)"
+  echo "takes effect when the backend restarts: deploy restarts it, or: systemctl restart $SERVICE"
 }
 
 rollback() {
@@ -179,6 +214,6 @@ restore_db() {
 }
 
 case "${1:-}" in
-  inspect) inspect ;; backup) backup ;; deploy) deploy "${2:-}" ;; verify) verify ;; rollback) rollback ;; restore-db) restore_db "${2:-}" ;;
-  *) sed -n '2,12p' "$0"; exit 1 ;;
+  inspect) inspect ;; backup) backup ;; deploy) deploy "${2:-}" ;; verify) verify ;; set-env) set_env ;; rollback) rollback ;; restore-db) restore_db "${2:-}" ;;
+  *) sed -n '2,13p' "$0"; exit 1 ;;
 esac

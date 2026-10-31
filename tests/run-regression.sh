@@ -5,7 +5,7 @@
 #   bash tests/run-regression.sh "instructor builder" "learner quiz"
 #
 # Requirements: frontend served by serve.ps1 (it provides the /__log endpoint the suites report to), backend running
-# with the demo accounts seeded and PAYMENTS_PROVIDER=mock + PAYMENTS_MOCK_ALLOWED=true, Chrome/Chromium. Environment:
+# with the demo accounts seeded, PAYMENTS_PROVIDER=mock + PAYMENTS_MOCK_ALLOWED=true and no SMTP_HOST, Chrome/Chromium. Environment:
 #   CHROME    path to the browser   (default: first of the usual install locations / PATH)
 #   BASE_URL  frontend URL          (default: http://localhost:5173)
 #   TIMEOUT   seconds per suite     (default: 250)
@@ -27,6 +27,18 @@ if [ -z "$CHROME" ]; then
   done
 fi
 [ -z "$CHROME" ] && { echo "Chrome not found. Set CHROME=/path/to/chrome"; exit 2; }
+
+# The suites create people and notifications with made-up addresses; against a backend that sends real e-mail every
+# one of them would go out from the production mailbox. /auth/forgot answers sent:true only when SMTP is configured
+# (the probe address is reserved and never has an account, so the probe itself sends nothing).
+API_URL="${API_URL:-http://localhost:8080/api}"
+if [ "${ALLOW_REAL_MAIL:-}" != 1 ] && curl -s --max-time 10 -X POST -H 'Content-Type: application/json' \
+     -d "{\"email\":\"probe-$$-$RANDOM@example.invalid\"}" "$API_URL/auth/forgot" | grep -q '"sent":true'; then
+  echo "The backend at $API_URL sends real e-mail (SMTP is configured), so the suites would mail every test address."
+  echo "Restart it without SMTP for test runs, e.g.  . tools/env.sh && SMTP_HOST= mvn -q spring-boot:run -Dspring-boot.run.profiles=postgres"
+  echo "(or set ALLOW_REAL_MAIL=1 to run anyway)"
+  exit 2
+fi
 
 ALL=(
   "instructor guide" "instructor builder" "learner learnerguide" "learner player" "learner quiz" "learner community"
