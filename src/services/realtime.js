@@ -19,6 +19,7 @@ let source = null;
 let startedForToken = null;
 let retryMs = 2000;
 let retryTimer = null;
+let revalidateOnOpen = false; // set when connectivity returns: whatever was announced while offline was missed
 const DEBOUNCE_MS = 700;
 const pending = new Map(); // type -> timer
 
@@ -71,8 +72,9 @@ async function connect() {
 
   es.addEventListener("hello", () => {
     everOpen = true;
-    const hadGap = retryMs > 2000; // this connection follows at least one failed attempt
+    const hadGap = retryMs > 2000 || revalidateOnOpen; // this connection follows a failed attempt or an offline spell
     retryMs = 2000;
+    revalidateOnOpen = false;
     if (hadGap) revalidateAll();
   });
   es.addEventListener("sync", (e) => {
@@ -111,3 +113,15 @@ export function startRealtime() {
 // Follow the session: sign-in starts the stream, sign-out (or account switch) drops it and its queued refreshes.
 bus.on("session", startRealtime);
 startRealtime();
+
+// Network loss and recovery: the browser knows before the stream times out. Going offline drops the stream; coming
+// back reconnects at once and re-pulls everything, so changes announced in between are not lost.
+if (typeof window !== "undefined") {
+  window.addEventListener("offline", () => { clearTimeout(retryTimer); if (source) { source.close(); source = null; } });
+  window.addEventListener("online", () => {
+    if (!getUser() || !getToken()) return;
+    stopRealtime();
+    revalidateOnOpen = true;
+    connect();
+  });
+}

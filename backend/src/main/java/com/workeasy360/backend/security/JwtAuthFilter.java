@@ -18,8 +18,9 @@ import java.io.IOException;
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtService jwt;
+    private final SessionGuard guard;
 
-    public JwtAuthFilter(JwtService jwt) { this.jwt = jwt; }
+    public JwtAuthFilter(JwtService jwt, SessionGuard guard) { this.jwt = jwt; this.guard = guard; }
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest req, @NonNull HttpServletResponse res, @NonNull FilterChain chain)
@@ -33,11 +34,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             try {
                 var claims = jwt.parse(token);
                 String userId = claims.getSubject();
-                Enums.Role role = Enums.Role.valueOf(claims.get("role", String.class));
-                String orgId = claims.get("org", String.class); // tokens issued before tenancy carry no org → default org
-                var principal = new CurrentUser(userId, role, orgId);
-                var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
-                SecurityContextHolder.getContext().setAuthentication(auth);
+                // A valid signature is not enough: the account must still be active, in an organization that may
+                // sign in, and it runs with its CURRENT role and organization (a demotion applies without waiting
+                // for the token to expire). No live state → unauthenticated → 401, which signs the browser out.
+                SessionGuard.Live live = guard.check(userId);
+                if (live != null) {
+                    var principal = new CurrentUser(userId, live.role(), live.orgId());
+                    var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                }
             } catch (JwtException | IllegalArgumentException ignored) {
                 // leave unauthenticated; endpoint-level security will reject with 401/403
             }

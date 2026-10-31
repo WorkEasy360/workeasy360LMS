@@ -30,9 +30,12 @@ public class PlatformController {
     private final OrganizationRepo orgs; private final SubscriptionRepo subscriptions; private final PlanRepo plans;
     private final UserRepo users; private final CourseRepo courses; private final AuditEventRepo auditEvents;
     private final PermissionService perm; private final AuditService audit; private final SyncService sync;
+    private final com.workeasy360.backend.security.SessionGuard sessions;
 
     public PlatformController(OrganizationRepo orgs, SubscriptionRepo subscriptions, PlanRepo plans, UserRepo users,
-                              CourseRepo courses, AuditEventRepo auditEvents, PermissionService perm, AuditService audit, SyncService sync) {
+                              CourseRepo courses, AuditEventRepo auditEvents, PermissionService perm, AuditService audit, SyncService sync,
+                              com.workeasy360.backend.security.SessionGuard sessions) {
+        this.sessions = sessions;
         this.orgs = orgs; this.subscriptions = subscriptions; this.plans = plans; this.users = users;
         this.courses = courses; this.auditEvents = auditEvents; this.perm = perm; this.audit = audit; this.sync = sync;
     }
@@ -77,6 +80,7 @@ public class PlatformController {
         if (!List.of("ACTIVE", "SUSPENDED").contains(status)) throw ApiException.badRequest("Status must be ACTIVE or SUSPENDED");
         o.setStatus(status);
         orgs.save(o);
+        sessions.evictAll(); // the organization's live sessions follow its new status on their next request
         if ("SUSPENDED".equals(status)) users.findByOrgId(id).forEach(u -> sync.disconnectUser(u.getId())); // drop live sessions' streams
         audit.record(me.getId(), id, "org.status", o.getName() + " -> " + status);
         return Map.of("id", o.getId(), "status", o.getStatus());

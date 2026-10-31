@@ -66,6 +66,25 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     ok(true, "an organisation-name change by the admin reached this session live");
     await adm("/settings", "PUT", { orgName: prevName || "WorkEasy360" });
 
+    // 4b. A lesson of the PUBLISHED course is revised: the learner's copy of the course updates live.
+    const revised = "Lesson 1 revised " + Date.now().toString(36);
+    ok((await adm(`/lessons/${lesson.id}`, "PUT", { title: revised })).ok, "setup: admin revised a lesson of the published course");
+    await waitFor(() => (load("courses").find((c) => c.id === cId)?.modules?.[0]?.lessons || []).some((l) => l.title === revised), 12000, "revised lesson reaches the learner");
+    ok(true, "a revised lesson in a published course reached the learner's session live");
+
+    // 4c. Network drop and recovery: nothing arrives while offline; on reconnect the client re-pulls what it missed.
+    await sleep(1200); // let the restore-name event above settle first
+    window.dispatchEvent(new Event("offline"));
+    await sleep(500);
+    const offName = "Offline change " + Date.now().toString(36);
+    await adm("/settings", "PUT", { orgName: offName });
+    await sleep(2500);
+    ok((load("settings")[0] || {}).orgName !== offName, "while offline the change does not arrive (the stream is really down)");
+    window.dispatchEvent(new Event("online"));
+    await waitFor(() => (load("settings")[0] || {}).orgName === offName, 15000, "missed change recovered after reconnect");
+    ok(true, "when connectivity returns the client reconnects and recovers the change it missed");
+    await adm("/settings", "PUT", { orgName: prevName || "WorkEasy360" });
+
     // 5. The other direction: a learner's progress reaches a signed-in admin's Learners view live.
     const learnerToken = await otherLogin(DEMO_EMAIL_BY_ROLE.learner);
     await loginReal(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
@@ -79,8 +98,83 @@ export function registerPlatform({ suites, log, ok, sleep, q, click, type, waitF
     }, 15000, "learner progress reaches the admin session live");
     ok(true, "a learner's lesson completion reached the signed-in admin's session without refresh");
 
+    // 5b. Course completion and a quiz result reach staff analytics, and the open staff views are told to refetch.
+    let learningSignals = 0;
+    const offSignal = bus.on("sync:learning", () => learningSignals++);
+    const tree3 = await (await adm(`/courses/${cId}/modules/${tree1.modules[0].id}/lessons`, "POST", { title: "Check", type: "QUIZ" })).json();
+    const quizLesson = tree3.modules[0].lessons.find((l) => l.title === "Check");
+    ok((await adm(`/lessons/${quizLesson.id}`, "PUT", { quiz: { passScore: 50, questions: [{ id: "q1", type: "tf", prompt: "Does live sync work?", answer: true }] } })).ok, "setup: a quiz lesson");
+    const signalsBefore = learningSignals;
+    const attempt = await (await lrn(`/lessons/${quizLesson.id}/quiz-attempts`, "POST", { responses: { q1: true } })).json();
+    ok(attempt?.score === 100 && attempt?.passed === true, "the learner's quiz is scored by the server (100%, passed)");
+    await waitFor(() => learningSignals > signalsBefore, 12000, "staff views told to refetch after the quiz");
+    ok(true, "the admin's open views were told to refetch the moment the quiz was submitted");
+    offSignal();
+    const stats = await (await adm(`/analytics/courses/${cId}`, "GET")).json();
+    ok(stats.quizAttempts >= 1 && stats.avgQuizScore === 100, `course analytics show the actual quiz result (${stats.quizAttempts} attempt, avg ${stats.avgQuizScore}%)`);
+    ok(stats.completed >= 1, `course analytics count the learner's course completion (${stats.completed})`);
+
     // Cleanup so reruns stay tidy.
     await adm(`/courses/${cId}`, "DELETE");
+  };
+
+  // Access changes take effect on LIVE sessions, not only at the next sign-in: deactivation, deletion, demotion and
+  // organization suspension all apply to tokens already handed out (which otherwise stay valid for 12 hours).
+  suites.sessionAccess = async () => {
+    const BASE = "http://localhost:8080/api";
+    const raw = (path, method = "GET", body, tok) => fetch(BASE + path, { method, headers: { ...(tok && { Authorization: "Bearer " + tok }), "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const login = async (email, password) => (await (await raw("/auth/login", "POST", { email, password })).json()).token;
+    const stamp = Date.now().toString(36);
+    const aTok = await login(DEMO_EMAIL_BY_ROLE.admin, DEMO_PASSWORD);
+
+    // deactivation and reactivation
+    const lEmail = `live.${stamp}@workeasy360.dev`;
+    const learner = (await (await raw("/users", "POST", { name: "Live Learner", email: lEmail, role: "learner", password: "LiveLearn123" }, aTok)).json()).user;
+    const lTok = await login(lEmail, "LiveLearn123");
+    ok((await raw("/auth/me", "GET", undefined, lTok)).status === 200, "setup: the learner's session works");
+    await raw(`/users/${learner.id}`, "PUT", { status: "INACTIVE" }, aTok);
+    ok((await raw("/auth/me", "GET", undefined, lTok)).status === 401, "deactivating a person ends their existing session immediately (401)");
+    ok((await raw("/courses/trees", "GET", undefined, lTok)).status === 401, "…for every API call, not only sign-in");
+    await raw(`/users/${learner.id}`, "PUT", { status: "ACTIVE" }, aTok);
+    ok((await raw("/auth/me", "GET", undefined, lTok)).status === 200, "reactivating restores the same session");
+
+    // demotion applies to the live token
+    const iEmail = `live.i.${stamp}@workeasy360.dev`;
+    const instr = (await (await raw("/users", "POST", { name: "Live Instructor", email: iEmail, role: "instructor", password: "LiveInstr123" }, aTok)).json()).user;
+    const iTok = await login(iEmail, "LiveInstr123");
+    ok((await raw("/courses", "POST", { id: "c-live" + stamp, title: "Before demotion" }, iTok)).status === 200, "setup: the instructor can create courses");
+    await raw(`/users/${instr.id}`, "PUT", { role: "learner" }, aTok);
+    ok((await raw("/courses", "POST", { id: "c-live2" + stamp, title: "After demotion" }, iTok)).status === 403, "a demoted instructor loses instructor rights on the token they already hold (403)");
+    await raw(`/users/${instr.id}`, "PUT", { role: "instructor" }, aTok);
+    await raw(`/courses/c-live${stamp}`, "DELETE", undefined, aTok);
+
+    // deletion
+    await raw(`/users/${learner.id}`, "DELETE", undefined, aTok);
+    ok((await raw("/auth/me", "GET", undefined, lTok)).status === 401, "a deleted person's session ends immediately (401)");
+
+    // organization suspension applies to sessions already open
+    const cEmail = `owner.${stamp}@live-c.dev`;
+    const reg = await (await raw("/public/organizations", "POST", { company: "Live C " + stamp, adminName: "C Owner", adminEmail: cEmail })).json();
+    const cTok = (await (await raw("/auth/reset", "POST", { token: reg.resetPath.split("/").pop(), password: "LiveCee123" })).json()).token;
+    ok((await raw("/users", "GET", undefined, cTok)).status === 200, "setup: Company C's admin is working");
+    const pTok = await login("platform@workeasy360.dev", "platform123456");
+    const orgC = ((await (await raw("/platform/organizations?q=" + encodeURIComponent("Live C " + stamp), "GET", undefined, pTok)).json()) || [])[0];
+    await raw(`/platform/organizations/${orgC.id}/status`, "POST", { status: "SUSPENDED" }, pTok);
+    ok((await raw("/users", "GET", undefined, cTok)).status === 401, "suspending an organization ends its members' open sessions immediately (401)");
+    await raw(`/platform/organizations/${orgC.id}/status`, "POST", { status: "ACTIVE" }, pTok);
+    ok((await raw("/users", "GET", undefined, cTok)).status === 200, "reactivation restores access");
+
+    // the browser follows: a deactivated person's open app signs out on its next request
+    const uEmail = `live.ui.${stamp}@workeasy360.dev`;
+    const uiUser = (await (await raw("/users", "POST", { name: "Live UI", email: uEmail, role: "learner", password: "LiveUi1234" }, aTok)).json()).user;
+    await loginReal(uEmail, "LiveUi1234");
+    navigate("/my-learning"); await waitFor(() => getUser()?.id === uiUser.id, 4000, "signed in in the browser");
+    await raw(`/users/${uiUser.id}`, "PUT", { status: "INACTIVE" }, aTok);
+    const { api } = await import("/src/services/api.js");
+    await api.me().catch(() => {});
+    await waitFor(() => !getUser() && location.hash.startsWith("#/login"), 6000, "browser signed out");
+    ok(!getUser() && location.hash.startsWith("#/login"), "the deactivated person's open browser session is signed out on its next request");
+    await raw(`/users/${uiUser.id}`, "DELETE", undefined, aTok);
   };
 
   // Multi-tenant SaaS: self-serve company registration provisions an isolated organization (plan, subscription,

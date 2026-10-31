@@ -33,10 +33,13 @@ public class UserController {
     private final com.workeasy360.backend.service.SyncService sync;
     private final com.workeasy360.backend.service.AuditService audit;
     private final com.workeasy360.backend.service.EntitlementService entitlements;
+    private final com.workeasy360.backend.security.SessionGuard sessions;
     public UserController(UserRepo users, PermissionService perm, PasswordEncoder encoder,
                           com.workeasy360.backend.service.PasswordResetService passwordResets, com.workeasy360.backend.service.MailService mail,
                           com.workeasy360.backend.service.UserDeleteService deleter, com.workeasy360.backend.service.SyncService sync,
-                          com.workeasy360.backend.service.AuditService audit, com.workeasy360.backend.service.EntitlementService entitlements) {
+                          com.workeasy360.backend.service.AuditService audit, com.workeasy360.backend.service.EntitlementService entitlements,
+                          com.workeasy360.backend.security.SessionGuard sessions) {
+        this.sessions = sessions;
         this.users = users; this.perm = perm; this.encoder = encoder; this.passwordResets = passwordResets; this.mail = mail; this.deleter = deleter; this.sync = sync;
         this.audit = audit; this.entitlements = entitlements;
     }
@@ -87,6 +90,7 @@ public class UserController {
     public UserDto update(@AuthenticationPrincipal CurrentUser me, @PathVariable String id, @RequestBody UpdateUserRequest req) {
         if (!perm.isAdmin(me)) throw ApiException.forbidden("Only an admin can change people");
         User u = inMyOrg(me, id);
+        Role previousRole = u.getRole();
         if (req.role() != null) {
             Role r = parseRole(req.role());
             if (u.getId().equals(me.getId()) && r != Role.ADMIN) throw ApiException.badRequest("You can't remove your own admin role");
@@ -98,8 +102,10 @@ public class UserController {
         if (req.dept() != null) u.setDept(cut(req.dept(), 120, u.getDept()));
         if (req.status() != null && List.of("ACTIVE", "INACTIVE").contains(req.status().toUpperCase())) u.setStatus(req.status().toUpperCase());
         u.setUpdatedAt(Instant.now());
+        boolean roleChanged = req.role() != null && parseRole(req.role()) != previousRole;
         UserDto d = UserDto.of(users.save(u));
-        if ("INACTIVE".equals(u.getStatus())) sync.disconnectUser(u.getId()); // deactivated: stop live updates immediately
+        sessions.evict(u.getId()); // the next request already runs with the new status and role
+        if ("INACTIVE".equals(u.getStatus()) || roleChanged) sync.disconnectUser(u.getId()); // stream reconnects (or stops) under the new access
         return d;
     }
 
@@ -110,6 +116,7 @@ public class UserController {
         if (!perm.isAdmin(me)) throw ApiException.forbidden("Only an admin can delete people");
         User target = inMyOrg(me, id);
         deleter.delete(me.getId(), id);
+        sessions.evict(id);
         sync.disconnectUser(id);
         audit.record(me.getId(), me.getOrgId(), "user.delete", target.getEmail());
         return Map.of("ok", true);
