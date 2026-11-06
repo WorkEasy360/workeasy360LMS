@@ -28,7 +28,9 @@ git -C "$ROOT" worktree add -q --detach "$WT" "$SHA"
 trap 'git -C "$ROOT" worktree remove --force "$WT" >/dev/null 2>&1 || true' EXIT
 ( cd "$WT/backend" && . "$ROOT/tools/env.sh" && mvn -q -DskipTests package )
 JAR="$OUT/backend-$SHA.jar"
-cp "$WT"/backend/target/backend-*.jar "$JAR"
+BUILT=$(ls "$WT"/backend/target/*.jar | head -1)
+[ -f "$BUILT" ] || { echo "the build produced no jar"; exit 1; }
+cp "$BUILT" "$JAR"
 ( cd "$OUT" && sha256sum "backend-$SHA.jar" > "backend-$SHA.jar.sha256" )
 echo "jar: $(du -h "$JAR" | cut -f1)  sha256: $(cut -c1-16 "$JAR.sha256")…"
 [ "$DRY" = 1 ] && { echo "dry run: stopping before any server access"; exit 0; }
