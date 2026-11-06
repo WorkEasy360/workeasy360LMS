@@ -13,6 +13,7 @@ public class AiProperties {
     private String apiKey = "";
     private String model = "";
     private String baseUrl = "";
+    private String reasoningEffort = "";
     private int timeoutSeconds = 60;
     private int maxInputChars = 12000;
     private int maxOutputTokens = 4000;
@@ -29,6 +30,8 @@ public class AiProperties {
     public void setModel(String model) { this.model = model; }
     public String getBaseUrl() { return baseUrl == null ? "" : baseUrl; }
     public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+    public String getReasoningEffort() { return reasoningEffort == null ? "" : reasoningEffort.trim().toLowerCase(); }
+    public void setReasoningEffort(String reasoningEffort) { this.reasoningEffort = reasoningEffort; }
     public int getTimeoutSeconds() { return timeoutSeconds; }
     public void setTimeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
     public int getMaxInputChars() { return maxInputChars; }

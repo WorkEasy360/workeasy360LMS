@@ -5,13 +5,15 @@
 #   sudo bash remote.sh backup                  pg_dump + verified test-restore into a throwaway database; records data counts
 #   sudo bash remote.sh deploy <sha>            install /tmp/backend-<sha>.jar (+ .sha256) and frontend at <sha>; restart backend
 #   sudo bash remote.sh verify                  health, routing, Flyway, data preserved, auth, SSE through Nginx, payment config
-#   sudo bash remote.sh set-env < settings      add/replace KEY=VALUE lines (SMTP_*, APP_PUBLIC_URL, PLATFORM_ADMIN_*) in the env file
+#   sudo bash remote.sh set-env < settings      add/replace KEY=VALUE lines (SMTP_*, AI_*, APP_PUBLIC_URL, PLATFORM_ADMIN_*) in the env file
+#   sudo bash remote.sh harden                  auto-restart + start at boot, hang watchdog, swap, log cap, nightly DB backups
 #   sudo bash remote.sh rollback                previous jar + previous frontend (schema changes are additive: no data restore)
 #   sudo bash remote.sh restore-db <dumpfile>   LAST RESORT: restore a dump into a new database and swap it in (old one kept)
 #
-# Scope: touches only /opt/workeasy360, the workeasy360-backend service and the WorkEasyLMS database. It never edits
-# Nginx, never prints secret values (the env file is read, never echoed), and never drops a database it did not
-# just create itself for verification.
+# Scope: touches only /opt/workeasy360, the workeasy360-* units and the WorkEasyLMS database; `harden` also adds a
+# swap file and a journal size cap, which only ever help other services on the host. It never edits Nginx, never
+# prints secret values (the env file is read, never echoed), and never drops a database it did not just create
+# itself for verification.
 set -euo pipefail
 
 ROOT=/opt/workeasy360
@@ -159,13 +161,91 @@ verify() {
     check "links in e-mails point at an https address" "[[ \"${APP_PUBLIC_URL:-}\" == https://* ]]"
   else echo "SKIP: SMTP_HOST not set — admins hand reset links over themselves"; fi
 
+  say "AI agent"
+  if [ "${AI_ENABLED:-false}" = true ]; then
+    check "AI provider, model and key configured" "[ -n \"${AI_PROVIDER:-}\" ] && [ -n \"${AI_MODEL:-}\" ] && [ -n \"${AI_API_KEY:-}\" ]"
+    [ "${AI_PROVIDER:-}" = openai ] && check "server reaches the AI provider and it accepts the key" "ai_key_ok"
+  else echo "SKIP: AI_ENABLED is not true — the agent answers from the built-in offline guide"; fi
+
+  say "resilience"
+  check "backend restarts automatically after a crash" "[ \"\$(systemctl show -p Restart --value $SERVICE)\" = always ]"
+  for s in $SERVICE nginx postgresql; do check "$s starts at boot" "systemctl is-enabled -q $s"; done
+  check "hang watchdog scheduled" "systemctl is-active -q workeasy360-watchdog.timer"
+  check "nightly database backup scheduled" "systemctl is-active -q workeasy360-backup.timer"
+
   say "result"; [ $fails = 0 ] && echo "ALL CHECKS PASSED" || { echo "$fails CHECK(S) FAILED"; exit 1; }
+}
+
+# The key travels in a curl config read from stdin, so it never appears in a process listing or in output.
+ai_key_ok() {
+  local base=${AI_BASE_URL:-https://api.openai.com/v1}
+  [ "$(printf 'header = "Authorization: Bearer %s"\n' "$AI_API_KEY" | curl -s -o /dev/null -w '%{http_code}' --max-time 20 -K - "${base%/}/models")" = 200 ]
+}
+
+# Makes the service survive the failures that took it down before: crashes, hangs, memory pressure, a full disk and
+# reboots, and keeps a rolling two weeks of database backups. Idempotent; each step reports what it found or did.
+harden() {
+  say "backend restarts after a crash and every service starts at boot"
+  mkdir -p /etc/systemd/system/$SERVICE.service.d
+  printf '[Unit]\nStartLimitIntervalSec=600\nStartLimitBurst=10\n\n[Service]\nRestart=always\nRestartSec=5\n' > /etc/systemd/system/$SERVICE.service.d/10-restart.conf
+  mkdir -p $ROOT/bin
+
+  cat > $ROOT/bin/watchdog.sh <<'EOF'
+#!/bin/bash
+# Restarts the backend when it is running but has stopped answering (two failed probes in a row, five minutes apart).
+state=/run/workeasy360-watchdog.failures
+systemctl is-active -q workeasy360-backend || { rm -f "$state"; exit 0; }
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -X POST -H 'Content-Type: application/json' -d '{}' "http://127.0.0.1:${SERVER_PORT:-8081}/api/auth/login" || true)
+if [ "$code" = 400 ] || [ "$code" = 401 ]; then rm -f "$state"; exit 0; fi
+n=$(( $(cat "$state" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$state"
+if [ "$n" -ge 2 ]; then logger -t workeasy360-watchdog "backend not answering (HTTP $code), restarting"; systemctl restart workeasy360-backend; rm -f "$state"; fi
+EOF
+  cat > $ROOT/bin/nightly-backup.sh <<'EOF'
+#!/bin/bash
+# Nightly pg_dump of the WorkEasyLMS database; dumps older than 14 days are removed.
+set -euo pipefail
+umask 077
+dir=/opt/workeasy360/backups/nightly; mkdir -p "$dir"
+export PGPASSWORD="${DB_PASSWORD:-}"
+pg_dump -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" -U "${DB_USERNAME:-we360}" -d "${DB_NAME:-we360}" -Fc -f "$dir/${DB_NAME:-we360}-$(date -u +%Y%m%dT%H%M%SZ).dump"
+find "$dir" -name '*.dump' -mtime +14 -delete
+EOF
+  chmod 750 $ROOT/bin/watchdog.sh $ROOT/bin/nightly-backup.sh
+  printf '[Unit]\nDescription=WorkEasyLMS hang watchdog\n\n[Service]\nType=oneshot\nEnvironmentFile=%s\nExecStart=/bin/bash %s/bin/watchdog.sh\n' "$ENV_FILE" "$ROOT" > /etc/systemd/system/workeasy360-watchdog.service
+  printf '[Unit]\nDescription=WorkEasyLMS hang watchdog every 5 minutes\n\n[Timer]\nOnBootSec=10min\nOnUnitActiveSec=5min\n\n[Install]\nWantedBy=timers.target\n' > /etc/systemd/system/workeasy360-watchdog.timer
+  printf '[Unit]\nDescription=WorkEasyLMS nightly database backup\nAfter=postgresql.service\n\n[Service]\nType=oneshot\nEnvironmentFile=%s\nExecStart=/bin/bash %s/bin/nightly-backup.sh\n' "$ENV_FILE" "$ROOT" > /etc/systemd/system/workeasy360-backup.service
+  printf '[Unit]\nDescription=WorkEasyLMS nightly database backup at 02:30 UTC\n\n[Timer]\nOnCalendar=*-*-* 02:30:00 UTC\nPersistent=true\nRandomizedDelaySec=15min\n\n[Install]\nWantedBy=timers.target\n' > /etc/systemd/system/workeasy360-backup.timer
+  systemctl daemon-reload
+  for s in $SERVICE nginx postgresql workeasy360-watchdog.timer workeasy360-backup.timer; do systemctl enable -q "$s" 2>/dev/null && echo "enabled at boot: $s" || echo "could not enable $s"; done
+  systemctl start workeasy360-watchdog.timer workeasy360-backup.timer
+  echo "Restart=$(systemctl show -p Restart --value $SERVICE) (takes effect for the running service now)"
+
+  say "swap (protects the JVM and PostgreSQL from out-of-memory kills on a small instance)"
+  if swapon --show --noheadings | grep -q .; then swapon --show
+  else
+    local memmb freemb; memmb=$(free -m | awk '/^Mem:/{print $2}'); freemb=$(df --output=avail -m / | tail -1 | tr -d ' ')
+    if [ "$memmb" -lt 4096 ] && [ "$freemb" -gt 4096 ]; then
+      if [ ! -f /swapfile ]; then fallocate -l 2G /swapfile; chmod 600 /swapfile; mkswap -q /swapfile; fi
+      swapon /swapfile
+      grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      echo 'vm.swappiness=10' > /etc/sysctl.d/90-workeasy360-swap.conf; sysctl -q -p /etc/sysctl.d/90-workeasy360-swap.conf
+      swapon --show
+    else echo "skipped: ${memmb} MB memory, ${freemb} MB free disk"; fi
+  fi
+
+  say "journal size cap (logs can't fill the disk)"
+  if [ -f /etc/systemd/journald.conf.d/90-workeasy360.conf ]; then echo "already capped"
+  else mkdir -p /etc/systemd/journald.conf.d; printf '[Journal]\nSystemMaxUse=300M\n' > /etc/systemd/journald.conf.d/90-workeasy360.conf; systemctl restart systemd-journald; echo "capped at 300M"; fi
+
+  say "automatic security updates (reported, not changed)"
+  echo "unattended-upgrades: $(systemctl is-enabled unattended-upgrades 2>/dev/null || echo not installed)"
+  df -h / | tail -1
 }
 
 # Reads KEY=VALUE lines from stdin and writes them into the env file, replacing earlier (or commented-out) lines for
 # the same key. Only the settings named here can be changed this way; values are never printed. Takes effect at the
 # next backend restart (deploy restarts it).
-SETTABLE="SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM SMTP_SSL SMTP_STARTTLS APP_PUBLIC_URL PLATFORM_ADMIN_EMAIL PLATFORM_ADMIN_PASSWORD"
+SETTABLE="SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM SMTP_SSL SMTP_STARTTLS APP_PUBLIC_URL PLATFORM_ADMIN_EMAIL PLATFORM_ADMIN_PASSWORD AI_ENABLED AI_PROVIDER AI_API_KEY AI_MODEL AI_BASE_URL AI_REASONING_EFFORT"
 set_env() {
   [ -t 0 ] && { echo "pipe KEY=VALUE lines in on stdin"; exit 1; }
   umask 077
@@ -214,6 +294,6 @@ restore_db() {
 }
 
 case "${1:-}" in
-  inspect) inspect ;; backup) backup ;; deploy) deploy "${2:-}" ;; verify) verify ;; set-env) set_env ;; rollback) rollback ;; restore-db) restore_db "${2:-}" ;;
-  *) sed -n '2,13p' "$0"; exit 1 ;;
+  inspect) inspect ;; backup) backup ;; deploy) deploy "${2:-}" ;; verify) verify ;; set-env) set_env ;; harden) harden ;; rollback) rollback ;; restore-db) restore_db "${2:-}" ;;
+  *) sed -n '2,16p' "$0"; exit 1 ;;
 esac

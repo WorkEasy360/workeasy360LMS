@@ -49,7 +49,12 @@ public class LearnerContextService {
         this.submissions = submissions; this.certificates = certificates; this.skillService = skillService; this.skills = skills; this.courseSkills = courseSkills; this.analytics = analytics;
     }
 
-    public Context build(CurrentUser u) {
+    public Context build(CurrentUser u) { return build(u, null); }
+
+    /** As build(u); courses named in {@code focus} (the user's question) are listed first among the available ones,
+     *  so the bounded list always carries the course the person is asking about. */
+    public Context build(CurrentUser u, String focus) {
+        String mention = focus == null ? "" : focus.toLowerCase();
         User user = users.findById(u.getId()).orElseThrow();
         String uid = user.getId();
         List<Enrollment> ens = enrollments.findByUserId(uid);
@@ -104,7 +109,8 @@ public class LearnerContextService {
         }
 
         Map<String, List<String>> skillsByCourse = courseSkills.findAll().stream().collect(Collectors.groupingBy(CourseSkill::getCourseId, Collectors.mapping(CourseSkill::getSkillId, Collectors.toList())));
-        List<AvailableCourse> available = published.stream().filter(id -> !courseIds.contains(id)).map(courseById::get).sorted(Comparator.comparing(Course::getTitle))
+        List<AvailableCourse> available = published.stream().filter(id -> !courseIds.contains(id)).map(courseById::get)
+                .sorted(Comparator.comparingInt((Course c) -> c.getTitle() != null && c.getTitle().length() >= 3 && mention.contains(c.getTitle().toLowerCase()) ? 0 : 1).thenComparing(Course::getTitle))
                 .map(c -> new AvailableCourse(c.getId(), c.getTitle(), orderedByCourse.getOrDefault(c.getId(), List.of()).stream().mapToInt(l -> l.getDurationMin() == null ? 5 : l.getDurationMin()).sum(), skillsByCourse.getOrDefault(c.getId(), List.of()), c.getLevel(), c.getCategory())).limit(MAX_AVAILABLE).toList();
 
         Map<String, QuizAttempt> latestByLesson = new HashMap<>();

@@ -211,6 +211,7 @@ export const api = {
   coachMessage: (body) => post("/coach/message", body),
   coachConversations: () => get("/coach/conversations"),
   coachConversation: (id) => get(`/coach/conversations/${id}`),
+  coachOperation: (messageId, index) => post(`/coach/messages/${encodeURIComponent(messageId)}/operations/${index}`), // runs a task the agent proposed, once the person confirms
   recommendations: () => get("/recommendations"),
   recommendationFeedback: (id, value) => post(`/recommendations/${id}/feedback`, { value }),
   recommendationDismiss: (id) => post(`/recommendations/${id}/dismiss`),

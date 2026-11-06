@@ -200,6 +200,7 @@ public class CourseService {
 
     public PublishResult publish(CurrentUser user, String id) {
         Course c = get(id);
+        if (!perm.sameOrg(user, c)) throw ApiException.notFound("Course"); // checked before readiness, which describes the course
         List<String> blockers = readiness(id);
         if (!blockers.isEmpty()) return new PublishResult(false, c.getStatus().name(), blockers, false);
         boolean instructorsCanPublish = settingsRepo.findByOrgId(c.getOrgId()).map(Settings::getInstructorPublish).orElse(true);

@@ -11,6 +11,7 @@ import { guidesForRole, contextGuide } from "../guide/guides.js";
 import { guideEngine } from "../guide/GuideEngine.js";
 import { AgentAvatar } from "./Brand.js";
 import { toast } from "./Overlay.js";
+import { OperationCard, isOperation } from "./AgentOperation.js";
 
 const NAME = "Work Easy AI Agent";
 const lessonFromPath = (path) => (path.match(/^\/learn\/[^/?]+\/([^/?]+)/) || [])[1] || null;
@@ -136,11 +137,14 @@ function emptyState() {
 
 function bubble(m) {
   const user = m.role === "USER";
-  const actions = (m.actions || []).map((a) => h("button", { class: ["agent-chip", (a.type === "CONTINUE_LESSON" || a.type === "START_PLAN") && "is-primary"], type: "button", "data-agent-action": a.type, onclick: () => act(a) }, a.label));
+  const all = m.actions || [];
+  const actions = all.filter((a) => !isOperation(a)).map((a) => h("button", { class: ["agent-chip", (a.type === "CONTINUE_LESSON" || a.type === "START_PLAN") && "is-primary"], type: "button", "data-agent-action": a.type, onclick: () => act(a) }, a.label));
+  const operations = all.map((a, i) => (isOperation(a) && m.id ? OperationCard(m, i, { onNavigate: () => { if (narrow()) setOpen(false); } }) : null)).filter(Boolean);
   return h("div", { class: ["agent-msg", user ? "is-user" : "is-coach"], "data-agent-msg": m.role }, [
     !user && AgentAvatar(28, "agent-msg-avatar"),
     h("div", { class: "agent-bubble-wrap" }, [
       h("div", { class: "agent-bubble" }, String(m.content || "").split("\n").map((line) => h("div", {}, line))),
+      ...operations,
       actions.length > 0 && h("div", { class: "agent-actions" }, actions),
       h("div", { class: "agent-time" }, timeAgo(new Date(m.at).getTime())),
     ]),

@@ -79,11 +79,15 @@ public class RecommendationService {
         }
         // targets that are no longer candidates (e.g. the course got completed) are closed, never re-surfaced silently
         for (Recommendation r : existing.values()) if (!live.contains(r.getRefKey()) && "ACTIVE".equals(r.getStatus())) { r.setStatus("COMPLETED"); recs.save(r); }
-        return out.stream().filter(r -> "ACTIVE".equals(r.getStatus())).sorted(Comparator.comparingInt(Recommendation::getPriority).reversed().thenComparing(Recommendation::getCreatedAt)).limit(MAX_ACTIVE).map(r -> dto(r, ctx)).toList();
+        return out.stream().filter(r -> "ACTIVE".equals(r.getStatus())).sorted(RANKING).limit(MAX_ACTIVE).map(r -> dto(r, ctx)).toList();
     }
 
+    /** One order everywhere, ties included, so the coach's "top recommendation" is the one the page shows first. */
+    private static final Comparator<Recommendation> RANKING = Comparator.comparingInt(Recommendation::getPriority).reversed()
+            .thenComparing(Recommendation::getCreatedAt).thenComparing(Recommendation::getId);
+
     public List<Recommendation> activeRows(String userId) {
-        return recs.findByUserId(userId).stream().filter(r -> "ACTIVE".equals(r.getStatus())).sorted(Comparator.comparingInt(Recommendation::getPriority).reversed()).limit(MAX_ACTIVE).toList();
+        return recs.findByUserId(userId).stream().filter(r -> "ACTIVE".equals(r.getStatus())).sorted(RANKING).limit(MAX_ACTIVE).toList();
     }
 
     public RecommendationDto feedback(CurrentUser u, String id, String value) {

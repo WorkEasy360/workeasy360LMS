@@ -36,17 +36,19 @@ import java.util.*;
 @Service
 @Transactional(noRollbackFor = ApiException.class)
 public class CoachService {
-    private static final Set<String> ACTIONS = Set.of("CONTINUE_LESSON", "VIEW_COURSE", "VIEW_SKILL", "VIEW_JOURNEY", "START_PLAN");
+    private static final Set<String> ACTIONS = Set.of("CONTINUE_LESSON", "VIEW_COURSE", "VIEW_SKILL", "VIEW_JOURNEY", "START_PLAN", "OPEN_PAGE");
     private static final Set<String> KINDS = Set.of("LESSON", "PRACTICE", "QUIZ", "REVIEW");
     private final AiProvider provider; private final AiProperties props; private final AiGenerationRepo generations;
     private final LearnerContextService contextService; private final RecommendationService recommendations; private final LearningPlanService plansService;
     private final CoachConversationRepo conversations; private final CoachMessageRepo messages; private final LessonRepo lessons;
+    private final AgentOperationsService operations;
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CoachService.class);
 
     public CoachService(AiProvider provider, AiProperties props, AiGenerationRepo generations, LearnerContextService contextService, RecommendationService recommendations,
-                        LearningPlanService plansService, CoachConversationRepo conversations, CoachMessageRepo messages, LessonRepo lessons) {
+                        LearningPlanService plansService, CoachConversationRepo conversations, CoachMessageRepo messages, LessonRepo lessons,
+                        AgentOperationsService operations) {
         this.provider = provider; this.props = props; this.generations = generations; this.contextService = contextService; this.recommendations = recommendations;
-        this.plansService = plansService; this.conversations = conversations; this.messages = messages; this.lessons = lessons;
+        this.plansService = plansService; this.conversations = conversations; this.messages = messages; this.lessons = lessons; this.operations = operations;
     }
 
     /** Snapshot for the Coach screen: greeting facts + recommendations + lesson context (no AI call). */
@@ -65,19 +67,25 @@ public class CoachService {
         String text = req.text() == null ? "" : req.text().replaceAll("[\\p{Cntrl}&&[^\n\t]]", " ").trim();
         if (text.isEmpty()) throw ApiException.badRequest("Ask the coach something first");
         if (text.length() > 1000) text = text.substring(0, 1000);
-        Context ctx = contextService.build(u);
-        List<Recommendation> recRows = new ArrayList<>(); recommendations.refresh(u.getId(), ctx); recRows.addAll(recommendations.activeRows(u.getId()));
         CoachConversation conv = req.conversationId() == null || req.conversationId().isBlank() ? null : conversations.findById(req.conversationId()).orElseThrow(() -> ApiException.notFound("Conversation"));
         if (conv != null && !conv.getUserId().equals(u.getId())) throw ApiException.forbidden("Not your conversation");
+        List<CoachMessage> earlier = conv == null ? List.of() : messages.findByConversationIdOrderByAtAsc(conv.getId());
+        List<String[]> history = earlier.stream().skip(Math.max(0, earlier.size() - 6)).map(m -> new String[]{ m.getRole().equals("USER") ? "Learner" : "Coach", m.getContent().length() > 400 ? m.getContent().substring(0, 400) : m.getContent() }).toList();
+        // What the person is talking about, including a follow-up such as "yes, assign it to her": the bounded lists
+        // in the context put the courses and people named here first.
+        String focus = text + "\n" + String.join("\n", history.stream().map(h -> h[1]).toList());
+        Context ctx = contextService.build(u, focus);
+        List<Recommendation> recRows = new ArrayList<>(); recommendations.refresh(u.getId(), ctx); recRows.addAll(recommendations.activeRows(u.getId()));
         ObjectNode lessonJson = req.lessonId() == null || req.lessonId().isBlank() ? null : lessonJson(ctx, req.lessonId());
         if (req.lessonId() != null && !req.lessonId().isBlank() && lessonJson == null) throw ApiException.forbidden("That lesson isn't available to you");
         if (conv == null) conv = conversations.save(CoachConversation.builder().userId(u.getId()).title(text.length() > 60 ? text.substring(0, 57) + "…" : text).lessonId(lessonJson == null ? null : req.lessonId()).build());
-        List<String[]> history = messages.findByConversationIdOrderByAtAsc(conv.getId()).stream().skip(Math.max(0, messages.findByConversationIdOrderByAtAsc(conv.getId()).size() - 6)).map(m -> new String[]{ m.getRole().equals("USER") ? "Learner" : "Coach", m.getContent().length() > 400 ? m.getContent().substring(0, 400) : m.getContent() }).toList();
         CoachMessage userMsg = messages.save(CoachMessage.builder().conversationId(conv.getId()).role("USER").content(text).build());
         conv.setUpdatedAt(Instant.now()); conversations.save(conv);
 
         String contextJson = contextService.toJson(ctx, recRows).toString();
-        String user = Prompts.coachUser(u.getRole().name(), contextJson, lessonJson == null ? null : lessonJson.toString(), history, text);
+        AgentOperationsService.Workspace workspace = operations.workspace(u, focus);
+        String workspaceJson = workspace == null ? null : operations.workspaceJson(workspace).toString();
+        String user = Prompts.coachUser(u.getRole().name(), contextJson, workspaceJson, AgentOperationsService.catalogueFor(u.getRole()), lessonJson == null ? null : lessonJson.toString(), history, text);
         String hash = sha256("COACH|" + u.getId() + "|" + text + "|" + (req.lessonId() == null ? "" : req.lessonId()) + "|" + contextJson.hashCode());
         if (!provider.configured()) throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "The learning coach isn't available right now (AI provider '" + provider.name() + "' is not configured). Your recommendations still work.");
         AiGeneration g = generations.save(AiGeneration.builder().userId(u.getId()).type(AiGeneration.Type.COACH).status(AiGeneration.Status.PENDING).provider(provider.name()).model(provider.model())
@@ -85,9 +93,10 @@ public class CoachService {
         String failure = null;
         for (int attempt = 1; attempt <= 2; attempt++) {
             try {
-                Completion c = provider.generateCoach(new Prompt(Prompts.COACH_SYSTEM, attempt == 1 ? user : user + Prompts.RETRY_HINT, Math.min(props.getMaxOutputTokens(), 1500)));
+                // Room for a reasoning model's thinking tokens as well as the reply; only tokens actually used are billed.
+                Completion c = provider.generateCoach(new Prompt(Prompts.COACH_SYSTEM, attempt == 1 ? user : user + Prompts.RETRY_HINT, Math.min(props.getMaxOutputTokens(), 3000)));
                 JsonNode raw = AiValidation.parseObject(c.text());
-                ObjectNode validated = validate(raw, ctx);
+                ObjectNode validated = validate(raw, ctx, u, workspace);
                 LearningPlanDto plan = null;
                 if (validated.has("planItems")) {
                     List<LearningPlanService.ItemSpec> specs = new ArrayList<>();
@@ -106,10 +115,11 @@ public class CoachService {
         throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, failure + ". Please try asking again — your recommendations and courses are unaffected.");
     }
 
-    /** Structural + referential validation: whitelisted action types, ids restricted to the learner's accessible context. */
-    ObjectNode validate(JsonNode raw, Context ctx) throws AiValidation.Invalid {
+    /** Structural + referential validation: whitelisted action types, ids restricted to the learner's accessible context,
+     *  pages restricted to the user's role, and operations validated by AgentOperationsService. */
+    ObjectNode validate(JsonNode raw, Context ctx, CurrentUser u, AgentOperationsService.Workspace workspace) throws AiValidation.Invalid {
         ObjectNode out = Json.MAPPER.createObjectNode();
-        String reply = raw.path("reply").asText("").trim();
+        String reply = plain(raw.path("reply").asText("")).trim();
         if (reply.isEmpty()) throw new AiValidation.Invalid("missing reply");
         out.put("reply", reply.length() > 2000 ? reply.substring(0, 1999) + "…" : reply);
         ArrayNode actions = out.putArray("actions");
@@ -119,6 +129,12 @@ public class CoachService {
             if (actions.size() >= 3) break;
             String type = a.path("type").asText("");
             if (!ACTIONS.contains(type) || type.equals("START_PLAN")) continue;
+            if (type.equals("OPEN_PAGE")) {
+                AgentOperationsService.Page page = AgentOperationsService.page(u.getRole(), a.path("page").asText(null));
+                if (page == null || actions.findValues("page").stream().anyMatch(p -> p.asText().equals(page.key()))) continue; // another role's screen is never offered
+                ObjectNode o = actions.addObject(); o.put("type", type); o.put("label", "Open " + page.label()); o.put("page", page.key()); o.put("href", page.path());
+                continue;
+            }
             String courseId = a.path("courseId").asText(null), lessonId = a.path("lessonId").asText(null), skillId = a.path("skillId").asText(null), pathId = a.path("pathId").asText(null);
             boolean ok = switch (type) {
                 case "CONTINUE_LESSON" -> courseId != null && lessonId != null && ctx.accessibleCourseIds().contains(courseId) && ctx.accessibleLessonIds().contains(lessonId);
@@ -131,6 +147,7 @@ public class CoachService {
             if (courseId != null) o.put("courseId", courseId); if (lessonId != null) o.put("lessonId", lessonId); if (skillId != null) o.put("skillId", skillId); if (pathId != null) o.put("pathId", pathId);
             o.put("href", type.equals("CONTINUE_LESSON") ? "/learn/" + courseId + "/" + lessonId : type.equals("VIEW_COURSE") ? "/explore/" + courseId : type.equals("VIEW_SKILL") ? "/skills" : "/journeys");
         }
+        actions.addAll(operations.validateProposals(raw.path("operations"), u, ctx, workspace));
         JsonNode plan = raw.path("plan");
         if (plan.isObject() && plan.path("items").isArray() && !plan.path("items").isEmpty()) {
             int minutes = Math.max(5, Math.min(240, plan.path("minutes").asInt(20)));
@@ -179,6 +196,10 @@ public class CoachService {
     }
 
     private static String defaultLabel(String type) { return switch (type) { case "CONTINUE_LESSON" -> "Continue lesson"; case "VIEW_COURSE" -> "View course"; case "VIEW_SKILL" -> "View skills"; default -> "View journey"; }; }
+    /** The chat shows plain text: markdown emphasis and headings a model adds anyway are reduced to their words. */
+    static String plain(String s) {
+        return s.replaceAll("\\*\\*(.+?)\\*\\*", "$1").replaceAll("__(.+?)__", "$1").replaceAll("(?m)^\\s{0,3}#{1,6}\\s+", "").replaceAll("(?m)^(\\s*)\\* ", "$1- ");
+    }
     private static String cut(String s, int max) { return s.length() <= max ? s : s.substring(0, max - 1) + "…"; }
     private static String sha256(String s) { try { byte[] d = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)); StringBuilder sb = new StringBuilder(); for (byte b : d) sb.append(String.format("%02x", b)); return sb.toString(); } catch (Exception e) { return Integer.toHexString(s.hashCode()); } }
 }

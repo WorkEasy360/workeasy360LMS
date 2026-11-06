@@ -14,6 +14,7 @@ import { NextStep, RecommendationList, PlanCard } from "../components/Recommenda
 import { loadCoachContext, sendCoachMessage, loadConversation, loadConversations, loadPlans, createPlan, SUGGESTED_PROMPTS, LESSON_PROMPTS } from "../services/coach.js";
 import { navigate } from "../router.js";
 import { AgentAvatar } from "../components/Brand.js";
+import { OperationCard, isOperation } from "../components/AgentOperation.js";
 
 export function CoachPage(ctx) {
   const user = ctx.user;
@@ -47,10 +48,12 @@ export function CoachPage(ctx) {
 
   // ---------- conversation ----------
   function bubble(m) {
-    const actions = (m.actions || []).map((a) => Button({ label: a.label, icon: a.type === "CONTINUE_LESSON" ? "play" : a.type === "START_PLAN" ? "clock" : "arrow-right", size: "sm", variant: a.type === "CONTINUE_LESSON" || a.type === "START_PLAN" ? "primary" : "secondary", attrs: { "data-coach-action": a.type }, onClick: () => a.type === "START_PLAN" ? startPlan(a.planId) : navigate(a.href) }));
+    const all = m.actions || [];
+    const actions = all.filter((a) => !isOperation(a)).map((a) => Button({ label: a.label, icon: a.type === "CONTINUE_LESSON" ? "play" : a.type === "START_PLAN" ? "clock" : "arrow-right", size: "sm", variant: a.type === "CONTINUE_LESSON" || a.type === "START_PLAN" ? "primary" : "secondary", attrs: { "data-coach-action": a.type }, onClick: () => a.type === "START_PLAN" ? startPlan(a.planId) : navigate(a.href) }));
+    const operations = all.map((a, i) => (isOperation(a) && m.id ? h("div", { style: "margin-top:8px" }, OperationCard(m, i)) : null)).filter(Boolean);
     return h("div", { class: ["coach-msg", m.role === "USER" ? "is-user" : "is-coach"], "data-coach-msg": m.role }, [
       m.role === "COACH" && AgentAvatar(28, "coach-avatar"),
-      h("div", { class: "coach-bubble" }, [h("div", { class: "coach-text" }, m.content.split("\n").map((line) => h("div", {}, line))), actions.length > 0 && h("div", { class: "row wrap", style: "margin-top:8px" }, actions), h("div", { class: "xs muted", style: "margin-top:4px" }, [m.role === "COACH" ? "Grounded in your learning record · " : "", timeAgo(new Date(m.at).getTime())])]),
+      h("div", { class: "coach-bubble" }, [h("div", { class: "coach-text" }, m.content.split("\n").map((line) => h("div", {}, line))), ...operations, actions.length > 0 && h("div", { class: "row wrap", style: "margin-top:8px" }, actions), h("div", { class: "xs muted", style: "margin-top:4px" }, [m.role === "COACH" ? "Grounded in your learning record · " : "", timeAgo(new Date(m.at).getTime())])]),
     ]);
   }
   async function startPlan(planId) { try { const { planAction } = await import("../services/coach.js"); await planAction(planId, "start"); toast("Plan started — your first item is ready", { type: "success" }); await reload(); } catch (err) { toast(err.message, { type: "error" }); } }

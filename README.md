@@ -116,8 +116,9 @@ Copy `backend/.env.example` and export the values (never commit real secrets).
 | `AI_ENABLED` | `false` | `false` = deterministic local mock provider (no network, no key) |
 | `AI_PROVIDER` | `mock` | `mock`, `openai` (or any OpenAI-compatible gateway) or `anthropic` |
 | `AI_API_KEY` | – | Provider key; held in memory only, never stored or returned by the API |
-| `AI_MODEL` | – | e.g. `gpt-4o-mini`, `claude-sonnet-4-5` |
-| `AI_BASE_URL` | provider default | Optional gateway/proxy base URL |
+| `AI_MODEL` | – | e.g. `gemini-2.5-flash`, `gpt-4o-mini`, `claude-sonnet-4-5` |
+| `AI_BASE_URL` | provider default | Optional gateway/proxy base URL. Google Gemini: `AI_PROVIDER=openai` with `https://generativelanguage.googleapis.com/v1beta/openai` |
+| `AI_REASONING_EFFORT` | – | OpenAI-compatible providers only: `none`, `low`, `medium` or `high`. Lower is cheaper and faster |
 | `AI_TIMEOUT_SECONDS` | `60` | Provider call timeout |
 | `AI_MAX_INPUT_CHARS` | `12000` | Prompt input cap |
 | `AI_MAX_OUTPUT_TOKENS` | `4000` | Provider output cap |
@@ -143,15 +144,39 @@ learning plans are deterministic and work with `AI_ENABLED=false`; the coach cha
 
 The assistant's identity, role model and security policy are the **WorkEasy360 master agent prompt** at
 `backend/src/main/resources/prompts/workeasy360-agent.md` — edit that file to evolve the assistant's behaviour, no
-code change needed. When a real provider runs, `Prompts.COACH_SYSTEM` (`learning-coach-v2`) sends it ahead of a
-runtime profile (single organization, no callable tools, context-JSON only) and the strict JSON reply contract; it
-adds roughly 6k tokens of input per coach message, priced by your AI provider. The mock provider ignores it.
+code change needed. When a real provider runs, `Prompts.COACH_SYSTEM` (`learning-coach-v3`) sends it ahead of a
+runtime profile (tenant-scoped context, the role's operations as the only tools), the persona and scope rules
+(talks like a colleague, product topics only, the user's own panel only, nothing confidential) and the strict JSON
+reply contract; it adds roughly 7k tokens of input per message, priced by your AI provider. The mock provider ignores it.
 
 The **Work Easy AI Agent** (`src/components/Agent.js`) is the floating agent on every signed-in page: the robot
 launcher bottom-right opens a side panel with suggested questions, conversation history and guided tours for the
 user's role. It uses the same coach endpoints (`/api/coach/message`, `/api/coach/conversations`), so answers stay
 grounded in the user's own record; in the lesson player it also sends the current lesson. It is hidden on `/coach`,
 the full-page version of the same conversation.
+
+**Tasks.** The agent can carry out in-product work for the person it is talking to
+(`service/AgentOperationsService.java`):
+
+| Role | Tasks |
+|---|---|
+| Learner | enrol in a free published course |
+| Instructor | create a draft course, publish one of their courses (or submit it for review), assign a course to a learner |
+| Admin | the instructor tasks for any course, plus add a person, activate or deactivate an account, change a role, set a course's instructor, issue a password-reset link |
+
+Every person can also be offered buttons to open the screens of their own panel. The model only *proposes* a task.
+The backend validates the proposal against what that person may see and writes the button label and confirmation
+text itself. Nothing runs until the person presses the button. The task then runs through the same services the
+screens use, with the person's own permissions (`POST /api/coach/messages/{id}/operations/{index}`).
+
+Each task:
+
+- runs at most once and is audited as `agent.<task>`;
+- updates other open screens through the live-update stream;
+- shows a one-time temporary password or reset link once, without storing it.
+
+Instructors and staff also get a bounded "workspace" context: the courses they manage and the people they may act
+on, with whatever the question names listed first.
 
 ## 6a. Sign-up, free and paid courses, purchases
 
@@ -242,15 +267,38 @@ docker build -t we360-backend backend/                    # or the multi-stage D
 
 `tools/deploy/remote.sh` is the scripted path for the EC2 host: `inspect` (read-only), `backup` (pg_dump plus a
 verified test-restore), `deploy <sha>`, `verify` (health, routing, data preserved, live SSE through Nginx, payment
-configuration, e-mail) and `rollback`. Migrations V8 onward are additive with defaults, and Flyway ignores migrations a build
-doesn't know, so rolling back to an older jar needs no database restore. `set-env` reads `KEY=VALUE` lines on stdin
-and writes them into the server's env file without printing values (only `SMTP_*`, `APP_PUBLIC_URL` and
-`PLATFORM_ADMIN_*` are accepted), e.g. the SMTP block from your local `backend/.env`:
-`grep '^SMTP_' backend/.env | ssh <host> 'sudo bash /tmp/remote.sh set-env'`, plus
-`echo APP_PUBLIC_URL=https://learn.workeasy360.com | ssh <host> 'sudo bash /tmp/remote.sh set-env'`.
+configuration, e-mail, AI key, resilience), `harden` and `rollback`. Migrations V8 onward are additive with defaults,
+and Flyway ignores migrations a build doesn't know, so rolling back to an older jar needs no database restore.
+
+`set-env` reads `KEY=VALUE` lines on stdin and writes them into the server's env file without printing values. Only
+`SMTP_*`, `AI_*`, `APP_PUBLIC_URL` and `PLATFORM_ADMIN_*` are accepted. For example, to copy the SMTP and AI blocks
+from your local `backend/.env`:
+
+- `grep -E '^(SMTP|AI)_' backend/.env | ssh <host> 'sudo bash /tmp/remote.sh set-env'`
+- `echo APP_PUBLIC_URL=https://learn.workeasy360.com | ssh <host> 'sudo bash /tmp/remote.sh set-env'`
+
+`harden` protects against the failures that take a small server down. It is safe to re-run:
+
+- the backend restarts after a crash, and the backend, Nginx and PostgreSQL start at boot;
+- a watchdog restarts the backend when it stops answering;
+- a 2 GB swap file is added on hosts under 4 GB of memory;
+- the system journal is capped at 300 MB;
+- a nightly `pg_dump` runs, kept for 14 days under `/opt/workeasy360/backups/nightly`.
+
+These backups live on the same disk. An off-machine copy, such as an EBS snapshot schedule, still needs setting up in AWS.
+
+To deploy everything in one go from the developer PC (Git Bash), run
+`bash tools/deploy/deploy-from-pc.sh <server-ip> [<sha>] [--dry-run]`. It does the following:
+
+1. Builds the jar from a clean checkout of the pushed commit and checksums it.
+2. Runs `inspect`, then a verified `backup`.
+3. Copies the `SMTP_*` and `AI_*` settings from `backend/.env`, plus the production `APP_PUBLIC_URL`, through `set-env`.
+4. Runs `deploy`, `harden` and `verify`.
+
+`--dry-run` stops after the build.
 
 The regression runner refuses to run against a backend that sends real e-mail (the suites create people with made-up
-addresses); start the backend with `SMTP_HOST=` for test runs.
+addresses); start the backend with `SMTP_HOST=` and `AI_ENABLED=false` for test runs.
 
 Deploy the frontend as static files (`index.html`, `src/`) behind any web server/CDN, set
 `window.WE360_API_BASE`, and add the site's origin to `CORS_ORIGINS`. Back up the PostgreSQL database and the
@@ -290,7 +338,8 @@ learnerguide, player, quiz, community, smoke, quizBackend, assignmentBackend, co
 certVerify, quizFresh, skillProgress, skillQuizEvidence, journey, skillsPersist, analyticsLearner, analyticsFunnel,
 analyticsAssessments, analyticsPersist, aiRbac, responsive (phone-width overflow check), signup, freeCourseAccess, paidCourseLock, purchaseFlow, purchaseFailures, coachContext, recommendations, recommendationFeedback,
 coachConversation, coachLessonContext, coachGrounding, coachRbac, coachValidation, learningPlan, coachPersist, agent
-(Work Easy AI Agent), certificate (printable certificate, names, QR code).
+(Work Easy AI Agent), agentOps (the agent's tasks: confirm-to-run, role limits, a misbehaving model's proposals
+dropped, one-time secrets never stored), certificate (printable certificate, names, QR code).
 Suites always run with `AI_ENABLED=false` (mock provider) — no external AI calls.
 
 ## 11. Guides

@@ -16,11 +16,14 @@ import java.util.regex.Pattern;
  * same input always yields the same result and automated tests need no API key. It is clearly labelled as
  * `mock` in every generation record and in /api/ai/status — it does not pretend to be a real model.
  *
- * Test hook: an input containing the token `__malformed__` makes the mock return text that is not JSON, so the
- * malformed-response path (retry once, then a recoverable error) can be exercised deterministically.
+ * Test hooks: an input containing the token `__malformed__` makes the mock return text that is not JSON, so the
+ * malformed-response path (retry once, then a recoverable error) can be exercised deterministically. A coach
+ * question containing `__rawreply__` returns the JSON that follows the token verbatim, so tests can play a
+ * misbehaving model and prove the server-side validation drops whatever the user's role may not do.
  */
 public class MockAiProvider implements AiProvider {
     public static final String MALFORMED_TOKEN = "__malformed__";
+    public static final String RAW_REPLY_TOKEN = "__rawreply__";
 
     @Override public String name() { return "mock"; }
     @Override public String model() { return "deterministic-mock-v1"; }
@@ -78,20 +81,51 @@ public class MockAiProvider implements AiProvider {
     @Override public Completion generateCoach(Prompt prompt) {
         if (prompt.user().contains(MALFORMED_TOKEN)) return new Completion("I think you should… {reply: 'unquoted'", name(), model());
         String u = prompt.user();
-        JsonNode ctx = block(u, "Learner context (JSON):\n"), lesson = block(u, "Current lesson (JSON):\n");
+        if (u.contains(RAW_REPLY_TOKEN)) return new Completion(u.substring(u.lastIndexOf(RAW_REPLY_TOKEN) + RAW_REPLY_TOKEN.length()).trim(), name(), model());
+        JsonNode ctx = block(u, "Learner context (JSON):\n"), lesson = block(u, "Current lesson (JSON):\n"), ws = block(u, "Workspace context (JSON):\n");
         String question = u.substring(u.lastIndexOf("Question: ") + 10).trim().toLowerCase();
         java.util.regex.Matcher rm = Pattern.compile("User role: (\\w+)").matcher(u);
         String role = rm.find() ? rm.group(1) : "LEARNER";
         ObjectNode out = Json.MAPPER.createObjectNode();
         ArrayNode actions = out.putArray("actions");
+        ArrayNode ops = out.putArray("operations");
         String name = ctx == null ? "there" : ctx.path("learner").path("name").asText("there").split(" ")[0];
+        String page = pageAsked(question, role);
         // Instructors and administrators get answers for THEIR panel, not learner recommendations. The offline
         // provider keeps this deterministic and honest: topics are matched on word stems (so "how to ad an
         // intructor" still lands on People), and every answer is the real step-by-step in this product.
         if (!"LEARNER".equals(role)) {
             boolean admin = "ADMIN".equals(role);
-            String reply = staffReply(admin, question);
+            String opReply = staffOperation(admin, question, ws, ops);
+            String reply = opReply != null ? opReply
+                    : page != null ? openPage(actions, page)
+                    : !STAFF_TOPICS.matcher(question).find() ? (admin
+                        ? "That's outside what I can help with here. I'm your WorkEasyLMS assistant, so I stick to running your organisation's learning: people, courses, assignments, reviews, analytics and settings. Want help with any of those?"
+                        : "That's outside what I can help with here. I'm your WorkEasyLMS assistant, so I stick to your teaching: your courses, learners, reviews and analytics. Want help with any of those?")
+                    : staffReply(admin, question);
             out.put("reply", reply);
+            return new Completion(out.toString(), name(), model());
+        }
+        if (ctx != null && page != null) { out.put("reply", openPage(actions, page)); return new Completion(out.toString(), name(), model()); }
+        if (ctx != null && question.matches(".*\\b(enrol|enroll|sign me up|join|register me)\\b.*")) {
+            String title = null, courseId = null;
+            for (JsonNode c : ctx.path("availableCourses")) { String t = c.path("title").asText("").toLowerCase(); if (!t.isBlank() && question.contains(t) && (title == null || t.length() > title.length())) { title = t; courseId = c.path("courseId").asText(); } }
+            JsonNode mine = null; for (JsonNode c : ctx.path("courses")) { String t = c.path("title").asText("").toLowerCase(); if (!t.isBlank() && question.contains(t)) mine = c; }
+            if (courseId != null) {
+                ObjectNode op = ops.addObject(); op.put("op", "ENROLL_COURSE"); op.putObject("args").put("courseId", courseId);
+                out.put("reply", "Good choice, " + name + ". I've set up your enrolment. Just confirm below and you can start straight away.");
+            } else if (mine != null) {
+                out.put("reply", "You're already enrolled in " + mine.path("title").asText() + ", " + name + ", so you can pick up where you left off.");
+                if (mine.has("nextLesson")) { ObjectNode a = actions.addObject(); a.put("type", "CONTINUE_LESSON"); a.put("label", "Continue " + mine.path("title").asText()); a.put("courseId", mine.path("courseId").asText()); a.put("lessonId", mine.path("nextLesson").path("lessonId").asText()); }
+            } else {
+                StringBuilder r = new StringBuilder("Which course would you like? Courses open to you right now:");
+                int n = 0; for (JsonNode c : ctx.path("availableCourses")) { if (n++ >= 3) break; r.append("\n- ").append(c.path("title").asText()); }
+                out.put("reply", n == 0 ? "There aren't any other published courses open to you right now, " + name + "." : r.toString());
+            }
+            return new Completion(out.toString(), name(), model());
+        }
+        if (question.matches(".*\\b(add|invite|create) (a |an |new )*(user|person|people|instructor|admin|account)s?\\b.*|.*\\b(deactivate|publish|change (his|her|their|the) role)\\b.*")) {
+            out.put("reply", "That's something your administrator or instructor looks after, " + name + ". I'm here for your own learning: your courses, progress, skills and certificates.");
             return new Completion(out.toString(), name(), model());
         }
         JsonNode recs = ctx == null ? Json.MAPPER.createArrayNode() : ctx.path("recommendations");
@@ -159,6 +193,110 @@ public class MockAiProvider implements AiProvider {
         out.put("reply", reply.toString());
         return new Completion(out.toString(), name(), model());
     }
+    /** Anything a staff member might reasonably ask about this product; a question matching none of it is off-topic. */
+    private static final Pattern STAFF_TOPICS = Pattern.compile("cours|lesson|module|learner|people|person|instruct|admin|user|role|assign|enrol|publish|draft|quiz|assess|review|submi|grad|certif|skill|analyt|report|progress|complet|setting|logo|brand|automat|notif|e-?mail|smtp|organi[sz]|team|member|staff|account|passw|reset|invite|\\badd\\b|\\bad\\b|onboard|start|deactiv|activat|page|dashboard|community|journey|price|free|paid|video|content|builder|\\bai\\b|lms|workeasy|help|set ?up|customer|compan|buy|purchas|trainer|teach|feedback|evaluat|stats|funnel|engag|due date|badge|credential|archive");
+    private static final Pattern NAV = Pattern.compile("\\b(take me to|go to|open|show me|navigate to|bring me to|where is|where are)\\b\\s+(?:the |my )?([a-z -]+)");
+
+    /** The page key for "take me to / open …", or null when the question isn't a navigation request this role may make. */
+    private static String pageAsked(String q, String role) {
+        Matcher m = NAV.matcher(q);
+        if (!m.find()) return null;
+        String rest = m.group(2);
+        boolean learner = "LEARNER".equals(role);
+        String[][] map = { {"people", "people"}, {"settings", "settings"}, {"analytics", "analytics"}, {"assessment", "assessments"}, {"reviews", "assessments"},
+                {"learners", "learners"}, {"automation", "automation"}, {"integration", "integrations"}, {"certification", "certifications"},
+                {"certificate", learner ? "certificates" : "certifications"}, {"courses", learner ? "explore" : "courses"}, {"explore", "explore"},
+                {"my learning", "my-learning"}, {"journey", "journeys"}, {"progress", "progress"}, {"achievement", "achievements"}, {"skill", "skills"},
+                {"community", "community"}, {"notification", "notifications"}, {"coach", "coach"}, {"home", "home"}, {"dashboard", "home"} };
+        com.workeasy360.backend.domain.Enums.Role r;
+        try { r = com.workeasy360.backend.domain.Enums.Role.valueOf(role); } catch (IllegalArgumentException e) { return null; }
+        for (String[] e : map) if (rest.contains(e[0])) return com.workeasy360.backend.service.AgentOperationsService.page(r, e[1]) == null ? null : e[1];
+        return null;
+    }
+    private static String openPage(ArrayNode actions, String page) {
+        ObjectNode a = actions.addObject(); a.put("type", "OPEN_PAGE"); a.put("page", page); a.put("label", "Open");
+        return "Sure, here you go. Tap the button below to open it.";
+    }
+
+    /** Recognises the in-product tasks a staff member asks for and proposes them; null when the question isn't a task. */
+    private static String staffOperation(boolean admin, String q, JsonNode ws, ArrayNode ops) {
+        if (ws == null) return null;
+        Matcher em = Pattern.compile("[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}").matcher(q);
+        if (em.find() && q.matches(".*\\b(add|invite|create|onboard)\\b.*")) {
+            if (!admin) return "Adding people is an administrator's job. Ask your admin to add them under People; once they're in, I can assign your courses to them.";
+            String before = q.substring(0, em.start());
+            Matcher vm = Pattern.compile(".*\\b(?:add|invite|create|onboard)\\b").matcher(before);
+            String raw = (vm.find() ? before.substring(vm.end()) : before)
+                    .replaceAll("\\b(a|an|new|user|person|account|instructor|learner|admin|called|named|with|e-?mail|email|address|as|for|please|the|teammate|colleague)\\b", " ")
+                    .replaceAll("[^a-z' -]", " ").replaceAll("\\s+", " ").trim();
+            if (raw.length() < 2) return "Happy to add them. What's their full name?";
+            String role = q.matches(".*\\binstructors?\\b.*") ? "INSTRUCTOR" : q.matches(".*\\badmin(istrator)?s?\\b.*") ? "ADMIN" : "LEARNER";
+            ObjectNode op = ops.addObject(); op.put("op", "ADD_PERSON"); ObjectNode a = op.putObject("args"); a.put("name", titleWords(raw)); a.put("email", em.group()); a.put("role", role);
+            return "Sure. I've set up an account for " + titleWords(raw) + " as " + (role.equals("INSTRUCTOR") ? "an instructor" : role.equals("ADMIN") ? "an admin" : "a learner") + ". Confirm below and I'll show you their one-time password to hand over.";
+        }
+        JsonNode person = matchPerson(q, ws.path("people")), course = matchCourse(q, ws.path("courses"));
+        String who = person == null ? null : person.path("name").asText();
+        boolean adminTask = q.matches(".*\\b(deactivate|disable|suspend|reactivate|reset)\\b.*") || (q.matches(".*\\b(make|change|promote|demote)\\b.*") && q.matches(".*\\b(role|instructor|admin|learner)\\b.*") && course == null);
+        if (adminTask && !admin) return "Only an administrator can change accounts, roles or passwords. I can help with your courses, learners and reviews.";
+        if (person != null && q.matches(".*\\b(deactivate|disable|suspend)\\b.*")) {
+            op(ops, "SET_PERSON_STATUS").put("userId", person.path("userId").asText()).put("status", "INACTIVE");
+            return "Okay. I've lined up deactivating " + who + ". They won't be able to sign in until you reactivate them. Confirm below when you're sure.";
+        }
+        if (person != null && q.matches(".*\\b(reactivate|activate|enable)\\b.*")) {
+            op(ops, "SET_PERSON_STATUS").put("userId", person.path("userId").asText()).put("status", "ACTIVE");
+            return "Sure. Confirm below and " + who + " can sign in again.";
+        }
+        if (person != null && q.matches(".*\\breset\\b.*")) {
+            op(ops, "RESET_LINK").put("userId", person.path("userId").asText());
+            return "I'll create a one-time password-reset link for " + who + ". Confirm and I'll show it to you so you can pass it on.";
+        }
+        if (admin && person != null && course != null && q.matches(".*\\b(instructor (of|for)|owner of|own)\\b.*")) {
+            op(ops, "ASSIGN_INSTRUCTOR").put("courseId", course.path("courseId").asText()).put("userId", person.path("userId").asText());
+            return "Got it. I've set up " + who + " as the instructor of " + course.path("title").asText() + ". Confirm below.";
+        }
+        Matcher rm = Pattern.compile("\\b(instructor|admin|learner)\\b").matcher(q);
+        if (person != null && q.matches(".*\\b(make|change|promote|demote)\\b.*") && rm.find()) {
+            op(ops, "CHANGE_ROLE").put("userId", person.path("userId").asText()).put("role", rm.group(1).toUpperCase());
+            return "Sure. I've lined up making " + who + " " + (rm.group(1).equals("instructor") || rm.group(1).equals("admin") ? "an " : "a ") + rm.group(1) + ". Confirm below.";
+        }
+        if (course != null && person != null && q.matches(".*\\b(assign|enrol|enroll)\\b.*")) {
+            ObjectNode a = op(ops, "ASSIGN_COURSE").put("courseId", course.path("courseId").asText()).put("userId", person.path("userId").asText());
+            Matcher dm = Pattern.compile("\\b(20\\d\\d-\\d\\d-\\d\\d)\\b").matcher(q); if (dm.find()) a.put("dueDate", dm.group(1));
+            return "Done deal once you confirm: " + course.path("title").asText() + " for " + who + ". They'll get a notification.";
+        }
+        if (course != null && q.matches(".*\\bpublish\\b.*")) {
+            op(ops, "PUBLISH_COURSE").put("courseId", course.path("courseId").asText());
+            return "Ready to publish " + course.path("title").asText() + ". Confirm below; if anything is missing I'll tell you what.";
+        }
+        if (q.matches(".*\\b(create|start|make|new)\\b.*\\bcourse\\b.*")) {
+            Matcher tm = Pattern.compile("[\"“']([^\"”']{3,120})[\"”']|\\b(?:called|titled|named|about)\\s+(.{3,120})$").matcher(q);
+            if (!tm.find()) return null; // a "how do I create a course" question: the how-to answer follows
+            String title = titleWords((tm.group(1) != null ? tm.group(1) : tm.group(2)).replaceAll("[?.!]+$", "").trim());
+            op(ops, "CREATE_COURSE").put("title", title);
+            return "Nice. I've set up a new draft course called " + title + ". Confirm and I'll take you to the Course Builder to add modules and lessons.";
+        }
+        return null;
+    }
+    private static ObjectNode op(ArrayNode ops, String name) { ObjectNode o = ops.addObject(); o.put("op", name); return o.putObject("args"); }
+    private static JsonNode matchPerson(String q, JsonNode people) {
+        JsonNode best = null;
+        for (JsonNode p : people) { String n = p.path("name").asText("").toLowerCase(); if (n.length() > 1 && q.contains(n) && (best == null || n.length() > best.path("name").asText().length())) best = p; }
+        if (best != null) return best;
+        JsonNode only = null; int hits = 0;
+        for (JsonNode p : people) { String first = p.path("name").asText("").toLowerCase().split(" ")[0]; if (first.length() > 2 && Pattern.compile("\\b" + Pattern.quote(first) + "\\b").matcher(q).find()) { only = p; hits++; } }
+        return hits == 1 ? only : null;
+    }
+    private static JsonNode matchCourse(String q, JsonNode courses) {
+        JsonNode best = null;
+        for (JsonNode c : courses) { String t = c.path("title").asText("").toLowerCase(); if (t.length() > 2 && q.contains(t) && (best == null || t.length() > best.path("title").asText().length())) best = c; }
+        return best;
+    }
+    private static String titleWords(String s) {
+        StringBuilder b = new StringBuilder();
+        for (String w : s.trim().split("\\s+")) { if (w.isEmpty()) continue; if (b.length() > 0) b.append(' '); b.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1)); }
+        return b.toString();
+    }
+
     /** Picks the best staff topic by counting stem hits (typo-tolerant), then answers with the product's real steps. */
     private static String staffReply(boolean admin, String q) {
         String[][] topics = {

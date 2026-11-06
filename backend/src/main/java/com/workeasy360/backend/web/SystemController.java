@@ -49,7 +49,8 @@ public class SystemController {
         storage.put("kind", "local-filesystem"); storage.put("root", storageRoot); storage.put("videos", videos.count());
         out.put("storage", storage);
         Map<String, Object> aiMap = new LinkedHashMap<>();
-        aiMap.put("enabled", ai.isEnabled()); aiMap.put("provider", ai.getProvider()); aiMap.put("mock", ai.usesMock()); aiMap.put("model", ai.getModel().isBlank() ? null : ai.getModel()); aiMap.put("configured", ai.usesMock() || (!ai.getApiKey().isBlank() && !ai.getModel().isBlank()));
+        // "provider" is the one actually answering: with AI disabled that is the offline mock, whatever is configured.
+        aiMap.put("enabled", ai.isEnabled()); aiMap.put("provider", ai.usesMock() ? "mock" : ai.getProvider()); aiMap.put("configuredProvider", ai.getProvider()); aiMap.put("mock", ai.usesMock()); aiMap.put("model", ai.getModel().isBlank() ? null : ai.getModel()); aiMap.put("configured", ai.usesMock() || (!ai.getApiKey().isBlank() && !ai.getModel().isBlank()));
         out.put("ai", aiMap);
         out.put("cors", corsOrigins);
         Map<String, Object> counts = new LinkedHashMap<>();

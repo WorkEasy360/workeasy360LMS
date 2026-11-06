@@ -56,6 +56,7 @@ public final class HttpAiProviders {
             body.put("model", props.getModel());
             body.put("temperature", 0.4);
             body.put("max_tokens", p.maxOutputTokens());
+            if (!props.getReasoningEffort().isBlank()) body.put("reasoning_effort", props.getReasoningEffort());
             body.putObject("response_format").put("type", "json_object");
             ArrayNode msgs = body.putArray("messages");
             msgs.addObject().put("role", "system").put("content", p.system());

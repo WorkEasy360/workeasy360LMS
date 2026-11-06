@@ -135,7 +135,7 @@ export function registerCoach({ suites, log, ok, sleep, q, click, type, waitFor,
     const full = await apiGet(`/coach/conversations/${convs[0].id}`);
     ok(full.messages.length === 4 && full.messages[1].role === "COACH" && full.messages[1].generationId, "conversation persists both turns with the AI audit reference");
     const gen = await apiGet(`/ai/generations/${full.messages[1].generationId}`);
-    ok(gen?.type === "COACH" && gen.promptVersion === "learning-coach-v2" && gen.provider === "mock", "each coach turn is audited (type COACH, prompt learning-coach-v2)");
+    ok(gen?.type === "COACH" && gen.promptVersion === "learning-coach-v3" && gen.provider === "mock", "each coach turn is audited (type COACH, prompt learning-coach-v3)");
   };
 
   // Coach: lesson context grounds explanations in the actual lesson content.

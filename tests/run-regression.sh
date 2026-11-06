@@ -55,7 +55,7 @@ ALL=(
   "learner coachPersist" "admin adminUsers" "instructor assignLearner" "instructor notificationsBackend"
   "instructor platformAdmin" "instructor searchScope" "learner responsive" "admin accountLogin"
   "learner signup" "learner freeCourseAccess" "learner paidCourseLock" "learner purchaseFlow" "learner purchaseFailures"
-  "learner agent" "admin brand" "learner certificate" "admin passwordReset" "learner realtime" "admin tenantIsolation" "admin tenantIdor" "learner sessionAccess"
+  "learner agent" "admin brand" "learner certificate" "admin passwordReset" "learner realtime" "admin tenantIsolation" "admin tenantIdor" "learner sessionAccess" "admin agentOps"
 )
 [ $# -gt 0 ] && SUITES=("$@") || SUITES=("${ALL[@]}")
 

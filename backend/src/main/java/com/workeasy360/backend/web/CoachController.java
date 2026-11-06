@@ -3,6 +3,7 @@ package com.workeasy360.backend.web;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.workeasy360.backend.dto.CoachDtos.*;
 import com.workeasy360.backend.security.CurrentUser;
+import com.workeasy360.backend.service.AgentOperationsService;
 import com.workeasy360.backend.service.CoachService;
 import com.workeasy360.backend.service.LearningPlanService;
 import com.workeasy360.backend.service.RecommendationService;
@@ -14,8 +15,10 @@ import java.util.List;
 /** Learner-private Coach, recommendations and learning plans. Every record is scoped to the authenticated user. */
 @RestController
 public class CoachController {
-    private final CoachService coach; private final RecommendationService recommendations; private final LearningPlanService plans;
-    public CoachController(CoachService coach, RecommendationService recommendations, LearningPlanService plans) { this.coach = coach; this.recommendations = recommendations; this.plans = plans; }
+    private final CoachService coach; private final RecommendationService recommendations; private final LearningPlanService plans; private final AgentOperationsService operations;
+    public CoachController(CoachService coach, RecommendationService recommendations, LearningPlanService plans, AgentOperationsService operations) {
+        this.coach = coach; this.recommendations = recommendations; this.plans = plans; this.operations = operations;
+    }
 
     @GetMapping("/api/coach/context")
     public ObjectNode context(@AuthenticationPrincipal CurrentUser u, @RequestParam(required = false) String lessonId) { return coach.context(u, lessonId); }
@@ -25,6 +28,9 @@ public class CoachController {
     public List<ConversationDto> conversations(@AuthenticationPrincipal CurrentUser u) { return coach.conversations(u); }
     @GetMapping("/api/coach/conversations/{id}")
     public ConversationDto conversation(@AuthenticationPrincipal CurrentUser u, @PathVariable String id) { return coach.conversation(u, id); }
+    /** Runs an operation the agent proposed in one of the caller's own messages, once the caller confirms it. */
+    @PostMapping("/api/coach/messages/{messageId}/operations/{index}")
+    public AgentOperationsService.OpResult runOperation(@AuthenticationPrincipal CurrentUser u, @PathVariable String messageId, @PathVariable int index) { return operations.execute(u, messageId, index); }
 
     @GetMapping("/api/recommendations")
     public List<RecommendationDto> recommendations(@AuthenticationPrincipal CurrentUser u) { return recommendations.refresh(u); }

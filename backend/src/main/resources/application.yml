@@ -33,7 +33,8 @@ app:
     provider: ${AI_PROVIDER:mock}          # mock | openai | anthropic
     api-key: ${AI_API_KEY:}                # never persisted or exposed
     model: ${AI_MODEL:}
-    base-url: ${AI_BASE_URL:}              # optional OpenAI-compatible gateway / proxy
+    base-url: ${AI_BASE_URL:}              # optional OpenAI-compatible gateway / proxy (e.g. Google Gemini: https://generativelanguage.googleapis.com/v1beta/openai)
+    reasoning-effort: ${AI_REASONING_EFFORT:}  # optional, OpenAI-compatible providers only: none | low | medium | high (less = cheaper, faster)
     timeout-seconds: ${AI_TIMEOUT_SECONDS:60}
     max-input-chars: ${AI_MAX_INPUT_CHARS:12000}
     max-output-tokens: ${AI_MAX_OUTPUT_TOKENS:4000}
