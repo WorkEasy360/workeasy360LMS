@@ -59,6 +59,22 @@ class ConfigurationCheckTest {
     }
 
     @Test
+    @DisplayName("loopback is localhost, ::1 and all of 127.0.0.0/8, as the platform defines it; never a look-alike")
+    void loopbackRange() {
+        assertThatCode(() -> check(properties("http://127.0.0.1:8031", "http://127.0.0.12:8312/api/auth/callback/workeasy360",
+                KEY, false), "postgres", "local")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> check(properties("http://127.0.0.1:8031", "http://127.0.0.12:8312/api/auth/callback/workeasy360",
+                KEY, false), "postgres")).as("not under a local profile").hasMessageContaining("https");
+        for (String host : new String[] {"127.0.0.1", "127.0.0.12", "127.255.255.254", "localhost", "LOCALHOST", "[::1]"}) {
+            assertThat(Workeasy360ConfigurationCheck.acceptable("http://" + host + ":8312/x", true)).as(host).isTrue();
+        }
+        for (String host : new String[] {"128.0.0.1", "10.0.0.1", "127.0.0.256", "127.0.0.1.example.com", "127.example.com",
+                "localhost.example.com", "[::2]"}) {
+            assertThat(Workeasy360ConfigurationCheck.acceptable("http://" + host + ":8312/x", true)).as(host).isFalse();
+        }
+    }
+
+    @Test
     @DisplayName("an unusable private key refuses to start")
     void badKey() throws Exception {
         java.nio.file.Path bad = java.nio.file.Files.createTempFile("lms-bad-key", ".pem");
