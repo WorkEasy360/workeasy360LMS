@@ -39,7 +39,8 @@ import org.springframework.web.client.RestTemplate;
  *   <li>{@code typ} is {@code id_token} (an access token is not an identity assertion), {@code jti} is present,
  *       {@code organization_id} is a UUID, {@code product_code} is this product's;
  *   <li>{@code email} is present and {@code email_verified} is {@code true} (WorkEasyLMS keys its accounts'
- *       profile on the address and links an existing account by it, so an unverified address is refused);
+ *       profile on the address, and an existing account with it is refused or, only when
+ *       {@code WORKEASY360_LINK_BY_VERIFIED_EMAIL} is on, linked; an unverified address is refused);
  *   <li>the nonce is checked by Spring's OIDC provider against the pending request.
  * </ol>
  *

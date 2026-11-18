@@ -12,8 +12,9 @@ import org.springframework.stereotype.Component;
  *   <li>{@code WORKEASY360_SSO_ONLY=true}: nowhere. Password sign-in, self-registration, self-serve organization
  *       sign-up, password resets and password changes answer 403, and bearer tokens are refused
  *       ({@code JwtAuthFilter}).
- *   <li>Otherwise everywhere, except for an account linked to WorkEasy360: its password was retired at the link, and
- *       it cannot get a new one through a reset link or a password change (it signs in with WorkEasy360).
+ *   <li>Otherwise everywhere, except for an account linked to WorkEasy360: a link leaves the password it had as it
+ *       was (it keeps working until SSO-only, which is what retires it), but it cannot get a new one through a reset
+ *       link or a password change (it signs in with WorkEasy360).
  * </ul>
  */
 @Component
@@ -22,7 +23,7 @@ public class PasswordSignInPolicy {
     public static final String SSO_ONLY_MESSAGE =
             "WorkEasyLMS signs in with WorkEasy360. Choose \"Continue with WorkEasy360\" on the sign-in page.";
     public static final String FEDERATED_MESSAGE =
-            "This account signs in with WorkEasy360, so it has no WorkEasyLMS password to set.";
+            "This account signs in with WorkEasy360, so its WorkEasyLMS password cannot be reset or changed.";
 
     private final Workeasy360Properties properties;
     private final FederatedIdentities identities;

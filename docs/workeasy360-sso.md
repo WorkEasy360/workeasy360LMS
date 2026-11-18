@@ -66,6 +66,7 @@ product to a test organization and run a sign-in and a sign-out (steps 7 to 9) b
 | `WORKEASY360_POST_LOGOUT_REDIRECT_URI` | | Registered post-logout URI. Empty: "Sign out of WorkEasyLMS and WorkEasy360" is not offered |
 | `WORKEASY360_SSO_ONLY` | | Default `false`. `true`: WorkEasy360 is the only way in (below) |
 | `WORKEASY360_AUTO_PROVISION` | | Default `true`: a first sign-in from an unlinked WorkEasy360 organization creates its WorkEasyLMS organization. `false`: refused until an operator links one |
+| `WORKEASY360_LINK_BY_VERIFIED_EMAIL` | | Default `false`: a first sign-in whose address belongs to an existing WorkEasyLMS account is refused (`account_conflict`) until an operator links that account (`w360sso link-user`, section 6). `true`: the sign-in links it itself, only inside the organization the sign-in is for, never an account linked already, and audited (section 5) |
 | `WORKEASY360_SCOPES` | | Default `openid,email,profile,organization` |
 | `APP_PUBLIC_URL` | for local runs | Where the single-page app is. Sign-in lands on `<APP_PUBLIC_URL>/#/<route>` (production: same origin, may stay as it is) |
 | `LMS_SESSION_IDLE_TIMEOUT` | | Default `8h` |
@@ -125,19 +126,30 @@ the `dev`/`local` profiles (plain http) the same cookies drop the prefix and `Se
   subscription** (its access is WorkEasy360's entitlement), unless `WORKEASY360_AUTO_PROVISION=false`. An existing
   WorkEasyLMS organization (an existing customer) is linked by an operator **before** its people sign in (section 6).
 - **Person.** Linked on `(issuer, sub)`. Someone seen before is the account linked then, which must still be in the
-  organization the token names: **a sign-in never crosses organizations** (`account_conflict`). Someone new is linked
-  to the existing account with the same address only when WorkEasy360 says `email_verified`, only inside that
-  organization, never an account already linked to another identity, never the platform owner. Their password is
-  then retired and the bearer tokens they held stop working (`users.tokens_valid_after`). Otherwise a new account is
-  created: the organization's **administrator** when it has nobody yet, a **learner** otherwise; administrators change
-  roles under People as before.
+  organization the token names: **a sign-in never crosses organizations** (`account_conflict`). Someone new whose
+  address belongs to no account gets a new account: the organization's **administrator** when it has nobody yet, a
+  **learner** otherwise; administrators change roles under People as before.
+- **An existing account with the same address is never merged by default.** The same address is not proof of the
+  same person, so such a sign-in is refused with `account_conflict` ("ask your WorkEasyLMS administrator to link your
+  account") and nothing changes. The operator links the account after checking it is the same person:
+  `w360sso link-user` (section 6), audited with who, when, which accounts and why.
+- **`WORKEASY360_LINK_BY_VERIFIED_EMAIL=true`** (off by default) lets the sign-in link that account itself, only when
+  WorkEasy360 says `email_verified` (always required), only when the account is in the WorkEasyLMS organization linked
+  to the signing-in WorkEasy360 organization (an account of any other organization, including one never linked to
+  WorkEasy360, stays `account_conflict`), never an account already linked to a WorkEasy360 person, never the platform
+  owner. Every automatic link is audited as `workeasy360.account_linked` ("automatic link by WorkEasy360-verified
+  address", with the account, the `sub`, the organization and the issuer).
+- **Linking removes nothing.** Neither link retires the account's password or ends its sessions: existing
+  authentication stays until the migration and linking are proven. `WORKEASY360_SSO_ONLY` (section 7) is what retires
+  password sign-in.
 - **Roles** stay WorkEasyLMS's own (`users.role`): the ID token carries none, by design. Every permission rule
   (`PermissionService`, tenant checks) applies unchanged, because a WorkEasy360 session runs as an ordinary
   `CurrentUser` of its organization.
 - **One person, one WorkEasyLMS organization.** WorkEasyLMS keeps one organization per account and unique addresses,
   so someone who belongs to two WorkEasy360 organizations can use WorkEasyLMS in the first one they signed in with;
   the other answers `account_conflict`.
-- **Accounts linked to WorkEasy360** cannot get a password back: reset links and password changes are refused for them.
+- **Accounts linked to WorkEasy360** keep the password they had, but cannot get a new one: reset links and password
+  changes are refused for them.
 
 ## 6. Operator commands
 
@@ -151,6 +163,7 @@ sudo bash -c 'set -a; . /etc/workeasy360/backend.env; set +a; java -jar /opt/wor
 |---|---|
 | `w360sso list` | Every organization, its status, and the WorkEasy360 organization it is linked to (and by whom) |
 | `w360sso link --workeasy360-organization=<uuid> --organization=<org id>` | Links an existing WorkEasyLMS organization. Refused when either side is linked already, or for the platform organization |
+| `w360sso link-user --user=<user id or e-mail> --workeasy360-organization=<uuid> --subject=<sub> --actor=<who> --reason=<why>` | Links one existing account to a WorkEasy360 person (`sub`, from WorkEasy360 Accounts), vouched for by the operator. The WorkEasy360 organization must be linked to the account's own organization. Refused when the account is linked already, the person is linked to another account, the account is deactivated or the platform owner. `--actor` and `--reason` are required and recorded in the audit event `workeasy360.operator.link_user` (with the account, the `sub`, the organization, the issuer and the time). The password and sessions stay |
 | `w360sso unlink --workeasy360-organization=<uuid>` | Removes the link. People and their identities stay; with auto-provisioning on, the next sign-in from that organization creates a new tenant, and its people then get `account_conflict`, so relink instead of leaving it unlinked |
 | `w360sso move-issuer --from=<issuer> --to=<issuer>` | The identity-link move of an issuer move (ADR-067): run it in the same release that changes `WORKEASY360_ISSUER` |
 
@@ -158,7 +171,10 @@ sudo bash -c 'set -a; . /etc/workeasy360/backend.env; set +a; java -jar /opt/wor
 `workeasy360.operator.*`. Exit status: 0 done, 1 refused, 2 usage error.
 
 To move an existing customer: `w360sso list` to find its organization id, ask WorkEasy360 for its organization UUID,
-`w360sso link`, then its people sign in with WorkEasy360; each is linked to their existing account by verified address.
+`w360sso link`, then `w360sso link-user` for each existing person (their `sub` from WorkEasy360 Accounts); after that
+they sign in with WorkEasy360 as their existing account. (With `WORKEASY360_LINK_BY_VERIFIED_EMAIL=true` their first
+sign-in links them instead, inside that organization only, audited.) People with no account yet get one at their first
+sign-in.
 
 ## 7. SSO-only
 
@@ -168,6 +184,12 @@ To move an existing customer: `w360sso list` to find its organization id, ask Wo
 sign-in page shows only "Continue with WorkEasy360", and a page that needs a signed-in person starts a WorkEasy360
 sign-in by itself (integration guide 6b) except on the sign-in page, after a sign-out (the marker), or within a minute
 of the last attempt. The platform-owner console (`PLATFORM_ADMIN_*`, a password account) is then unavailable too.
+
+This is how the passwords of linked accounts are retired. Linking keeps them (no existing authentication data is
+removed before the migration and linking are proven); with SSO-only on, no path accepts or sets a password and every
+bearer token is refused, so a stored password hash can no longer be used. The hashes stay in `users.password_hash`:
+deleting them is a separate, later data step, once every account is linked and SSO-only has run without problems.
+Turning SSO-only off again brings password sign-in back for exactly the accounts that had it.
 
 ## 8. Sign-out
 
@@ -240,7 +262,10 @@ For a password account the credential is the bearer token from `POST /api/auth/l
 (`support/FakeWorkeasy360`: discovery, key set, token endpoint verifying the client assertion and PKCE, entitlement
 endpoint, logout tokens, key rotation): the happy path, wrong issuer, audience, signature, key, algorithm, nonce,
 times, type, product, organization and e-mail, entitlement denial, read-only, client refusal and outage, tenancy
-(cross-organization refusal, isolation, linking by verified address, deactivation, operator commands), CSRF and
+(cross-organization refusal, isolation, deactivation, operator commands), account linking (an address match refused
+by default, `link-user` audited and refusing conflicts and missing actor or reason; with
+`WORKEASY360_LINK_BY_VERIFIED_EMAIL` on, a same-organization link audited, never across organizations, never a
+re-link, never unverified; passwords kept), CSRF and
 origin checks, password sign-in next to it, SSO-only, sign-out, and back-channel logout (valid, forged, replayed,
 overtaking a sign-in, key rotation) including two real servers sharing one database and a restart that must not
 bring an ended session back.

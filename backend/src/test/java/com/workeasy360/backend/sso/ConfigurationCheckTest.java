@@ -17,7 +17,7 @@ class ConfigurationCheckTest {
 
     private static Workeasy360Properties properties(String issuer, String redirect, String keyFile, boolean ssoOnly) {
         return new Workeasy360Properties(issuer, issuer == null ? null : "client", redirect, keyFile == null ? null : TestClientKeys.RSA_KEY_ID,
-                keyFile, null, "workeasy_lms", null, ssoOnly, true, List.of("openid"), "", Duration.ofHours(1), Duration.ofSeconds(5));
+                keyFile, null, "workeasy_lms", null, ssoOnly, true, false, List.of("openid"), "", Duration.ofHours(1), Duration.ofSeconds(5));
     }
 
     private static void check(Workeasy360Properties properties, String... profiles) {
@@ -95,7 +95,7 @@ class ConfigurationCheckTest {
             assertThat(NextPath.sanitize(unsafe)).as(String.valueOf(unsafe)).isEqualTo("/");
         }
         Workeasy360Properties withApp = new Workeasy360Properties(null, null, null, null, null, null, "workeasy_lms", null, false,
-                true, List.of("openid"), "http://localhost:5173/", Duration.ofHours(1), Duration.ofSeconds(5));
+                true, false, List.of("openid"), "http://localhost:5173/", Duration.ofHours(1), Duration.ofSeconds(5));
         assertThat(withApp.appLocation("/courses")).isEqualTo("http://localhost:5173/#/courses");
         assertThat(properties(null, null, null, false).appLocation("/")).isEqualTo("/#/");
     }

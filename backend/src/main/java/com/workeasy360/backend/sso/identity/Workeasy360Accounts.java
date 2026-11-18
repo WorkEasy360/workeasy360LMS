@@ -5,7 +5,6 @@ import com.workeasy360.backend.domain.Organization;
 import com.workeasy360.backend.domain.User;
 import com.workeasy360.backend.repo.Repos.OrganizationRepo;
 import com.workeasy360.backend.repo.Repos.UserRepo;
-import com.workeasy360.backend.security.SessionGuard;
 import com.workeasy360.backend.service.AuditService;
 import com.workeasy360.backend.service.EntitlementService;
 import com.workeasy360.backend.service.OrgSettingsService;
@@ -44,11 +43,14 @@ import org.springframework.transaction.support.TransactionTemplate;
  * account linked then, which must still be in the organization the token names: <strong>a sign-in never crosses
  * organizations</strong> ({@code account_conflict}). A person not seen before is, in this order:
  * <ol>
- *   <li>linked to the existing account with the same address, only when WorkEasy360 says {@code email_verified}
- *       (the ID token check already insists), only inside the organization the token names, never an account
- *       already linked to another identity, never the platform owner. The account's password is retired and the
- *       bearer tokens it had are refused from now on ({@code users.tokens_valid_after}), because sign-in now goes
- *       through WorkEasy360 (completion design section 5);</li>
+ *   <li>when an existing account has the same address: <strong>refused</strong> ({@code account_conflict}) by
+ *       default. Nothing is merged on an address; an operator links the account ({@code w360sso link-user}, audited,
+ *       {@link Workeasy360Operator}). Only with {@code WORKEASY360_LINK_BY_VERIFIED_EMAIL=true} is that account
+ *       linked by the sign-in itself, and then only when WorkEasy360 says {@code email_verified} (the ID token check
+ *       already insists), only inside the organization the token names, never an account already linked to another
+ *       identity, never the platform owner, and each such link is audited ({@code workeasy360.account_linked},
+ *       automatic). A link never removes the account's password or ends its sessions: {@code WORKEASY360_SSO_ONLY}
+ *       is what retires password sign-in;</li>
  *   <li>otherwise a new account: the organization's administrator when it has nobody yet (the first person of an
  *       organization WorkEasy360 just created), a learner otherwise. Administrators change roles under People as
  *       before.</li>
@@ -98,7 +100,6 @@ public class Workeasy360Accounts {
     private final OrgSettingsService settings;
     private final EntitlementService lmsPlans;
     private final AuditService audit;
-    private final SessionGuard sessions;
     private final PasswordEncoder encoder;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
@@ -107,8 +108,8 @@ public class Workeasy360Accounts {
 
     public Workeasy360Accounts(Workeasy360Properties properties, OrganizationLinks links, FederatedIdentities identities,
                                UserRepo users, OrganizationRepo orgs, OrgSettingsService settings,
-                               EntitlementService lmsPlans, AuditService audit, SessionGuard sessions,
-                               PasswordEncoder encoder, JdbcTemplate jdbc, PlatformTransactionManager transactionManager,
+                               EntitlementService lmsPlans, AuditService audit, PasswordEncoder encoder,
+                               JdbcTemplate jdbc, PlatformTransactionManager transactionManager,
                                Clock clock) {
         this.properties = properties;
         this.links = links;
@@ -118,7 +119,6 @@ public class Workeasy360Accounts {
         this.settings = settings;
         this.lmsPlans = lmsPlans;
         this.audit = audit;
-        this.sessions = sessions;
         this.encoder = encoder;
         this.jdbc = jdbc;
         this.transactions = new TransactionTemplate(transactionManager);
@@ -161,20 +161,24 @@ public class Workeasy360Accounts {
         Optional<User> sameAddress = users.findByEmailIgnoreCase(email);
         if (sameAddress.isPresent()) {
             User user = sameAddress.get();
-            requireUsable(user, orgId);
+            requireUsable(user, orgId); // the platform owner, another organization (another tenant), deactivated
             if (identities.forUser(user.getId()).isPresent()) {
                 throw new Refused(SignInErrors.ACCOUNT_CONFLICT, "account already linked to another identity");
             }
+            if (!properties.linkByVerifiedEmail()) {
+                // The same address is not the same person: an operator vouches for the link (w360sso link-user).
+                log.info("workeasy360.account_link_refused user={} organization={} reason=operator_link_required",
+                        user.getId(), orgId);
+                throw new Refused(SignInErrors.ACCOUNT_CONFLICT,
+                        "an account with this address exists and is not linked; an operator links it (w360sso link-user)");
+            }
             identities.insert(claims.issuer(), claims.subject(), user.getId(), email, claims.name(), now);
-            // Sign-in now goes through WorkEasy360: the password nobody should use again, and the bearer tokens it
-            // handed out, end here.
-            user.setPasswordHash(encoder.encode(unguessable()));
-            user.setTokensValidAfter(now);
-            users.save(user);
-            sessions.evict(user.getId());
+            // The password and the sessions the account has are left as they are: WORKEASY360_SSO_ONLY retires them.
             audit.record(user.getId(), orgId, "workeasy360.account_linked",
-                    "existing account linked by verified address; password retired, sessions ended");
-            log.info("workeasy360.account_linked user={} organization={}", user.getId(), orgId);
+                    "automatic link by WorkEasy360-verified address (WORKEASY360_LINK_BY_VERIFIED_EMAIL=true): account "
+                            + user.getId() + " to WorkEasy360 person " + claims.subject() + " of organization "
+                            + claims.workeasy360OrgId() + " under " + claims.issuer() + "; password and sessions kept");
+            log.info("workeasy360.account_linked user={} organization={} automatic=true", user.getId(), orgId);
             return new Linked(user.getId(), orgId, user.getRole());
         }
 

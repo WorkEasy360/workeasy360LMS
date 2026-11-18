@@ -40,7 +40,7 @@ public class FederatedIdentities {
                 ROW, userId).stream().findFirst();
     }
 
-    /** The account signs in with WorkEasy360: its password was retired when it was linked. */
+    /** The account signs in with WorkEasy360 (any password it had is kept, but never reset or changed). */
     public boolean isFederated(String userId) {
         Integer count = jdbc.queryForObject("select count(*) from federated_identities where user_id = ?",
                 Integer.class, userId);

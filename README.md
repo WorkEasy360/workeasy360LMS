@@ -138,6 +138,7 @@ Copy `backend/.env.example` and export the values (never commit real secrets).
 | `WORKEASY360_PRODUCT_CODE`, `WORKEASY360_POST_LOGOUT_REDIRECT_URI` | `workeasy_lms`, none | The product code the ID token must carry; the registered post-logout URI ("sign out of WorkEasy360 too") |
 | `WORKEASY360_SSO_ONLY` | `false` | `true` = WorkEasy360 is the only way in: password sign-in, sign-up, resets and bearer tokens are refused |
 | `WORKEASY360_AUTO_PROVISION` | `true` | A first sign-in from an unlinked WorkEasy360 organization creates its WorkEasyLMS organization; `false` = an operator links it first (`java -jar backend.jar w360sso link ...`) |
+| `WORKEASY360_LINK_BY_VERIFIED_EMAIL` | `false` | An existing account with the signing-in address is refused (`account_conflict`) until an operator links it (`w360sso link-user ... --actor= --reason=`); `true` = the sign-in links it, same organization only, never a linked account, audited |
 | `LMS_SESSION_IDLE_TIMEOUT` | `8h` | Idle timeout of a WorkEasy360 sign-in's server-side session |
 
 Frontend: the API base is `http://localhost:8080/api` by default; for another host set

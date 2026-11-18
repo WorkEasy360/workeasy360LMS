@@ -25,6 +25,11 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                              ways work, so live customers keep their passwords until their organization moves
  * @param autoProvision         a first sign-in from a WorkEasy360 organization that is not linked yet creates its
  *                              WorkEasyLMS organization; {@code false}: it is refused until an operator links it
+ * @param linkByVerifiedEmail   {@code false} (the default): a first sign-in whose address belongs to an existing
+ *                              WorkEasyLMS account is refused ({@code account_conflict}) until an operator links the
+ *                              account ({@code w360sso link-user}). {@code true}: such a sign-in links that account
+ *                              itself, only inside the organization the sign-in is for, never an account linked
+ *                              already, and audited
  * @param scopes                scopes requested at sign-in; every one must be registered for the client
  * @param appUrl                where the single-page app lives (APP_PUBLIC_URL); empty = this origin
  * @param discoveryTtl          how long the discovery document is reused
@@ -42,6 +47,7 @@ public record Workeasy360Properties(
         String postLogoutRedirectUri,
         @DefaultValue("false") boolean ssoOnly,
         @DefaultValue("true") boolean autoProvision,
+        @DefaultValue("false") boolean linkByVerifiedEmail,
         @DefaultValue({"openid", "email", "profile", "organization"}) List<String> scopes,
         String appUrl,
         @DefaultValue("1h") Duration discoveryTtl,

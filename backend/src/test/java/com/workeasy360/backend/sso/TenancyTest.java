@@ -85,7 +85,7 @@ class TenancyTest extends SsoTestBase {
     }
 
     @Test
-    @DisplayName("an existing password account is linked by its verified address inside the linked organization; its password and tokens end")
+    @DisplayName("an existing customer moves: the operator links the organization, then the account (never the address); role and password stay")
     void linkExistingAccount() throws Exception {
         String suffix = uuid().substring(0, 8);
         Organization org = orgs.saveAndFlush(Organization.builder().name("Legacy " + suffix).slug("legacy-" + suffix).status("ACTIVE").build());
@@ -98,17 +98,24 @@ class TenancyTest extends SsoTestBase {
         UUID workeasy360Org = UUID.randomUUID();
         assertThat(operator("link", "--workeasy360-organization=" + workeasy360Org, "--organization=" + org.getId()))
                 .contains("linked " + org.getId());
-        Thread.sleep(1100); // iat has whole seconds: the old token is from an earlier second than the link
+        String subject = uuid();
+        // The same verified address alone is not enough (WORKEASY360_LINK_BY_VERIFIED_EMAIL is off by default).
+        assertThat(ssoError(signInFresh("organization=" + workeasy360Org, spec -> {
+            spec.subject = subject;
+            spec.email = email.toUpperCase();
+        }))).isEqualTo("account_conflict");
+        assertThat(operator("link-user", "--user=" + legacy.getId(), "--workeasy360-organization=" + workeasy360Org,
+                "--subject=" + subject, "--actor=ops", "--reason=moving Legacy to WorkEasy360")).contains("linked account " + legacy.getId());
 
-        SignedIn linked = signedIn(workeasy360Org, uuid(), email.toUpperCase());
+        SignedIn linked = signedIn(workeasy360Org, subject, email.toUpperCase());
         String json = mvc.perform(get("/api/auth/session").session(linked.session())).andReturn().getResponse().getContentAsString();
         assertThat((String) JsonPath.read(json, "$.user.id")).isEqualTo(legacy.getId());
         assertThat((String) JsonPath.read(json, "$.user.role")).as("the role WorkEasyLMS gave them stays").isEqualTo("INSTRUCTOR");
 
+        // The link removed nothing: the password and its token work until SSO-only. No new password can be set.
         guard.evictAll();
-        mvc.perform(get("/api/courses").header("Authorization", "Bearer " + token)).andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"" + email + "\",\"password\":\"Legacy-passw0rd\"}")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/courses").header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+        login(email, "Legacy-passw0rd");
         assertThatThrownBy(() -> passwordResets.issue(legacy.getId(), null)).isInstanceOf(ApiException.class)
                 .hasMessageContaining("signs in with WorkEasy360");
     }

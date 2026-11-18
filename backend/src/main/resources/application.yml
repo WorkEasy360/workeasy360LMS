@@ -75,13 +75,14 @@ app:
 
 # Sign in with WorkEasy360 Accounts (docs/workeasy360-sso.md). The environment variables WORKEASY360_ISSUER,
 # WORKEASY360_CLIENT_ID, WORKEASY360_REDIRECT_URI, WORKEASY360_KEY_ID, WORKEASY360_PRIVATE_KEY_FILE (or
-# WORKEASY360_PRIVATE_KEY), WORKEASY360_PRODUCT_CODE, WORKEASY360_POST_LOGOUT_REDIRECT_URI, WORKEASY360_SSO_ONLY and
-# WORKEASY360_AUTO_PROVISION bind to these properties. With none of the first five set, WorkEasyLMS runs exactly as
+# WORKEASY360_PRIVATE_KEY), WORKEASY360_PRODUCT_CODE, WORKEASY360_POST_LOGOUT_REDIRECT_URI, WORKEASY360_SSO_ONLY,
+# WORKEASY360_AUTO_PROVISION and WORKEASY360_LINK_BY_VERIFIED_EMAIL bind to these properties. With none of the first five set, WorkEasyLMS runs exactly as
 # before (password sign-in only); with some but not all of them, it refuses to start.
 workeasy360:
   product-code: ${WORKEASY360_PRODUCT_CODE:workeasy_lms}
   sso-only: ${WORKEASY360_SSO_ONLY:false}
   auto-provision: ${WORKEASY360_AUTO_PROVISION:true}
+  link-by-verified-email: ${WORKEASY360_LINK_BY_VERIFIED_EMAIL:false}   # off: existing accounts are linked by an operator
   app-url: ${WORKEASY360_APP_URL:${APP_PUBLIC_URL:}}   # where the single-page app is; empty = this origin
 
 springdoc:

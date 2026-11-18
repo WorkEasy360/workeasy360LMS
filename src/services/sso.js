@@ -59,7 +59,7 @@ export const SSO_ERROR_MESSAGES = {
   access_policy: "Your organization's sign-in policy didn't allow this sign-in.",
   email_missing: "WorkEasy360 didn't share your e-mail address, which WorkEasyLMS needs.",
   email_unverified: "Verify your e-mail address in WorkEasy360, then sign in again.",
-  account_conflict: "Your e-mail address already belongs to a WorkEasyLMS account in another organization. Contact support.",
+  account_conflict: "Your e-mail address already belongs to a WorkEasyLMS account that isn't linked to this WorkEasy360 sign-in. Ask your WorkEasyLMS administrator to link your account.",
   account_disabled: "Your WorkEasyLMS account has been deactivated. Ask an administrator.",
   membership_inactive: "Your access has ended. Ask an administrator.",
   wrong_product: "That sign-in was meant for another product. Please try again from WorkEasyLMS.",
