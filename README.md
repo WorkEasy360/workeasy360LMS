@@ -321,7 +321,7 @@ provider and CORS without secrets.
 | Layer | How |
 | --- | --- |
 | Backend compile | `cd backend && mvn -q -DskipTests compile` |
-| Backend tests (WorkEasy360 sign-in, back-channel logout, entitlement, tenancy) | `cd backend && mvn -B test` (in-memory H2), or with `LMS_TEST_DB_URL` / `LMS_TEST_DB_USERNAME` / `LMS_TEST_DB_PASSWORD` against PostgreSQL; see [docs/workeasy360-sso.md](docs/workeasy360-sso.md) §11 |
+| Backend tests (WorkEasy360 sign-in, back-channel logout, entitlement, tenancy) | `cd backend && mvn -B test` with `LMS_TEST_DB_URL` / `LMS_TEST_DB_USERNAME` / `LMS_TEST_DB_PASSWORD` naming a throwaway PostgreSQL (without them the database tests are skipped); see [docs/workeasy360-sso.md](docs/workeasy360-sso.md) §11 |
 | API smoke / security | curl against `/api/...` (401 without token, 403 for wrong role, 404/409 guards) |
 | Browser regression (71 suites) | `index.html?as=<role>&selftest=<suite>` — see below |
 

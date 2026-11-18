@@ -10,12 +10,14 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
  * Every way an ID token (or the provider describing itself) can be wrong is refused, with no session and no account
  * or organization created.
  */
+@EnabledIfEnvironmentVariable(named = "LMS_TEST_DB_URL", matches = ".+", disabledReason = "needs PostgreSQL: set LMS_TEST_DB_URL")
 @DisplayName("Sign in with WorkEasy360: forged and wrong ID tokens are refused")
 class IdTokenRejectionTest extends SsoTestBase {
 

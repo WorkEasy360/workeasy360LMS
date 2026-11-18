@@ -210,13 +210,15 @@ export WORKEASY360_ISSUER=http://127.0.0.1:8031          # exactly what its disc
 export WORKEASY360_CLIENT_ID=<client id> WORKEASY360_KEY_ID=<kid> WORKEASY360_PRIVATE_KEY_FILE=$HOME/lms-dev.pem
 export WORKEASY360_REDIRECT_URI=http://localhost:8080/api/auth/callback/workeasy360
 export WORKEASY360_POST_LOGOUT_REDIRECT_URI=http://localhost:5173/
-export APP_PUBLIC_URL=http://localhost:5173 CORS_ORIGINS=http://localhost:5173
-mvn spring-boot:run                                       # dev profile (H2); or APP_PROFILE=postgres,local for PostgreSQL
+export APP_PUBLIC_URL=http://localhost:5173 CORS_ORIGINS=http://localhost:5173 JWT_SECRET=$(openssl rand -base64 48)
+docker compose -f docker-compose.yml up -d                # PostgreSQL 16 on 5432 (database/role we360)
+APP_PROFILE=postgres,local mvn spring-boot:run
 # frontend, another shell, from the repository root:  powershell -File serve.ps1 -Port 5173
 ```
 
-Plain `http` is accepted only because the issuer is a loopback host **and** a local profile (`dev`, or `local` added
-to another) is active. Use `localhost` for both the app and the API: the session cookie is per host, and a page on
+Plain `http` is accepted only because the issuer is a loopback host **and** a local profile (`local`, or `dev`) is
+active. Use PostgreSQL: the H2 `dev` profile cannot migrate a fresh database today, because `V11__organizations.sql`
+(already on `main`) uses `timestamptz`, which H2 2.2 refuses. Use `localhost` for both the app and the API: the session cookie is per host, and a page on
 `127.0.0.1` calling an API on `localhost` would be cross-site.
 
 **Prove it (200 vs 401).** Open `http://localhost:5173/`, choose "Continue with WorkEasy360" and sign in. The
@@ -248,4 +250,5 @@ docker run --rm -v "$PWD/backend:/src" -w /src -e LMS_TEST_DB_URL=jdbc:postgresq
   -e LMS_TEST_DB_USERNAME=<user> -e LMS_TEST_DB_PASSWORD=<password> maven:3.9-eclipse-temurin-21 mvn -B test
 ```
 
-Without `LMS_TEST_DB_URL` the same tests run on an in-memory H2 in PostgreSQL mode.
+Without `LMS_TEST_DB_URL` the database tests are skipped and only the configuration unit tests run (H2 cannot be used:
+see section 10).

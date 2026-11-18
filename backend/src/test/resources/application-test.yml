@@ -1,13 +1,15 @@
-# The backend tests (`mvn test`). They run against a real PostgreSQL when LMS_TEST_DB_URL is set (what production
-# uses; the multi-instance back-channel tests need one shared database), for example a throwaway container:
+# The backend tests (`mvn test`) run against a real PostgreSQL, the production engine; the multi-instance back-channel
+# tests need one database shared by two servers. Without LMS_TEST_DB_URL the database tests are skipped (only the
+# configuration unit tests run). A throwaway database is enough, for example a container:
 #
 #   LMS_TEST_DB_URL=jdbc:postgresql://localhost:5432/lms_test  LMS_TEST_DB_USERNAME=postgres  LMS_TEST_DB_PASSWORD=...
 #
-# and otherwise against an in-memory H2 in PostgreSQL mode (the dev profile's engine), so the build needs nothing.
+# H2 is not an option today: V11__organizations.sql (on main) uses timestamptz, which H2 2.2 refuses, so a fresh H2
+# database cannot be migrated past V10 (the dev profile has the same problem).
 spring:
   datasource:
-    url: ${LMS_TEST_DB_URL:jdbc:h2:mem:lmstest;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;NON_KEYWORDS=VALUE,USER;DB_CLOSE_DELAY=-1}
-    username: ${LMS_TEST_DB_USERNAME:sa}
+    url: ${LMS_TEST_DB_URL:}
+    username: ${LMS_TEST_DB_USERNAME:postgres}
     password: ${LMS_TEST_DB_PASSWORD:}
   jpa:
     hibernate:

@@ -14,11 +14,13 @@ import com.workeasy360.backend.sso.support.SsoTestBase;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MvcResult;
 
+@EnabledIfEnvironmentVariable(named = "LMS_TEST_DB_URL", matches = ".+", disabledReason = "needs PostgreSQL: set LMS_TEST_DB_URL")
 @DisplayName("Password sign-in keeps working next to WorkEasy360 sign-in (WORKEASY360_SSO_ONLY off)")
 class PasswordSignInTest extends SsoTestBase {
 

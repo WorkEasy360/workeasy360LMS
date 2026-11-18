@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.TypeExcludeFilter;
 import org.springframework.boot.web.context.WebServerApplicationContext;
@@ -46,9 +47,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * session back from disk and proves it is still refused. Every request is real HTTP with the browser's cookie; nothing
  * is mocked except WorkEasy360 ({@link FakeWorkeasy360}).
  *
- * <p>Run against PostgreSQL ({@code LMS_TEST_DB_URL}) this is the production arrangement. Against the in-memory H2
- * fallback both instances share the JVM's database, which proves the same sharing.
+ * <p>Against PostgreSQL ({@code LMS_TEST_DB_URL}): the production arrangement, advisory locks included.
  */
+@EnabledIfEnvironmentVariable(named = "LMS_TEST_DB_URL", matches = ".+", disabledReason = "needs PostgreSQL: set LMS_TEST_DB_URL")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("Back-channel logout across instances: two servers, one database")
