@@ -8,7 +8,8 @@ RUN mvn -q -B -DskipTests package
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /app/target/backend-0.1.0.jar app.jar
+# pom.xml names the jar <finalName>backend</finalName> (DockerfileTest keeps the two in step).
+COPY --from=build /app/target/backend.jar app.jar
 ENV APP_PROFILE=postgres FILE_STORAGE_PATH=/data/storage SERVER_PORT=8080
 VOLUME ["/data/storage"]
 EXPOSE 8080
