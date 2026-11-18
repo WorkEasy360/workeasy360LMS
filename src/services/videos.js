@@ -13,7 +13,7 @@ import { uid } from "../lib/dom.js";
 import { settings } from "./people.js";
 import { can } from "./permissions.js";
 import { getEnrollment } from "./learning.js";
-import { api, getToken, API_BASE } from "./api.js";
+import { api, getSessionKey, authHeaders, API_BASE } from "./api.js";
 
 export const ACCEPTED_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
 export const ACCEPTED_EXT = [".mp4", ".webm", ".mov"];
@@ -129,8 +129,8 @@ class RemoteVideoStorage extends VideoStorage {
       if (title) form.append("title", title);
       const xhr = new XMLHttpRequest();
       xhr.open("POST", API_BASE + "/videos");
-      const token = getToken();
-      if (token) xhr.setRequestHeader("Authorization", "Bearer " + token);
+      xhr.withCredentials = true; // a WorkEasy360 session is its httpOnly cookie
+      Object.entries(authHeaders("POST")).forEach(([name, value]) => xhr.setRequestHeader(name, value));
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
       xhr.onerror = () => reject(new Error("Upload failed — check your connection and try again."));
       xhr.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"));
@@ -158,9 +158,9 @@ const remoteVideoStorage = new RemoteVideoStorage();
 // mid-session switches over immediately); falls back to the local, zero-install IndexedDB store otherwise —
 // e.g. offline demos, or this dev environment before the backend was stood up.
 export const videoStorage = {
-  upload: (file, opts) => (getToken() ? remoteVideoStorage : localVideoStorage).upload(file, opts),
-  getPlaybackUrl: (storageKey, access) => (getToken() ? remoteVideoStorage : localVideoStorage).getPlaybackUrl(storageKey, access),
-  remove: (storageKey) => (getToken() ? remoteVideoStorage : localVideoStorage).remove(storageKey),
+  upload: (file, opts) => (getSessionKey() ? remoteVideoStorage : localVideoStorage).upload(file, opts),
+  getPlaybackUrl: (storageKey, access) => (getSessionKey() ? remoteVideoStorage : localVideoStorage).getPlaybackUrl(storageKey, access),
+  remove: (storageKey) => (getSessionKey() ? remoteVideoStorage : localVideoStorage).remove(storageKey),
   get: (storageKey) => localVideoStorage.get(storageKey), // local-only helper (dev/self-test introspection)
 };
 
@@ -247,7 +247,7 @@ export function recordVideoEvent(userId, courseId, lessonId, blockId, evt) {
 const lastSyncAt = new Map();
 const SYNC_EVERY_MS = 8000;
 export function syncVideoProgress(lessonId, blockId, vp, type = "progress", { keepalive = false } = {}) {
-  if (!getToken() || !vp) return;
+  if (!getSessionKey() || !vp) return;
   const now = Date.now();
   if (type === "progress" && now - (lastSyncAt.get(blockId) || 0) < SYNC_EVERY_MS) return;
   lastSyncAt.set(blockId, now);

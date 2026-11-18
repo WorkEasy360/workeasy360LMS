@@ -7,21 +7,53 @@
 export const API_BASE = (typeof window !== "undefined" && window.WE360_API_BASE) || "http://localhost:8080/api";
 
 const TOKEN_KEY = "we360.v3.token";
+// A WorkEasy360 sign-in leaves no token in the browser: the session lives on the server behind an httpOnly cookie that
+// script cannot read. This marker only records "this tab's session is a WorkEasy360 one" (a random value per sign-in,
+// so a new sign-in counts as a new session); it is not a credential and grants nothing.
+const W360_SESSION_KEY = "we360.v3.w360session";
 
 export const getToken = () => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };
 export const setToken = (t) => { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {} };
+const getW360Session = () => { try { return localStorage.getItem(W360_SESSION_KEY); } catch { return null; } };
+export const hasWorkeasy360Session = () => !!getW360Session();
+export const setWorkeasy360Session = (on) => {
+  try { on ? localStorage.setItem(W360_SESSION_KEY, Math.random().toString(36).slice(2) + Date.now().toString(36)) : localStorage.removeItem(W360_SESSION_KEY); } catch {}
+};
+// Which backend session requests run under (a password sign-in's token, or a WorkEasy360 session): null = none.
+export const getSessionKey = () => getToken() || (getW360Session() ? "w360:" + getW360Session() : null);
+
+// The CSRF token the backend issues to a session (cookie-to-header). Over https only the __Host- cookie is honoured:
+// a sibling subdomain can plant an unprefixed cookie, never a __Host- one.
+function csrfToken() {
+  if (typeof document === "undefined") return null;
+  const names = location.protocol === "https:" ? ["__Host-XSRF-TOKEN"] : ["__Host-XSRF-TOKEN", "XSRF-TOKEN"];
+  const jar = document.cookie.split(";").map((c) => c.trim());
+  for (const name of names) {
+    const c = jar.find((x) => x.startsWith(name + "="));
+    if (c) return decodeURIComponent(c.slice(name.length + 1));
+  }
+  return null;
+}
+/** Headers a write needs: the bearer token of a password session, or the CSRF token of a WorkEasy360 session. */
+export function authHeaders(method = "POST") {
+  const token = getToken();
+  if (token) return { Authorization: "Bearer " + token };
+  if (!/^(GET|HEAD|OPTIONS)$/i.test(method)) { const x = csrfToken(); if (x) return { "X-XSRF-TOKEN": x }; }
+  return {};
+}
 
 export class ApiError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
+  constructor(status, message, code) { super(message); this.status = status; this.code = code; }
 }
 
 let onUnauthorized = () => {};
 export const setUnauthorizedHandler = (fn) => (onUnauthorized = fn);
 
 async function request(path, { method = "GET", body, form, headers = {}, keepalive = false } = {}) {
-  const token = getToken();
-  const opts = { method, headers: { ...headers }, keepalive }; // keepalive: lets a final progress save outlive page unload
-  if (token) opts.headers.Authorization = "Bearer " + token;
+  const session = getSessionKey();
+  // credentials: a WorkEasy360 session is the httpOnly cookie, which the browser sends only when asked to (the API is
+  // another origin in local development). keepalive: lets a final progress save outlive page unload.
+  const opts = { method, headers: { ...headers, ...authHeaders(method) }, keepalive, credentials: "include" };
   if (form) opts.body = form; // browser sets multipart boundary
   else if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
 
@@ -32,16 +64,16 @@ async function request(path, { method = "GET", body, form, headers = {}, keepali
     throw new ApiError(0, "Can't reach the server. Check that the backend is running.");
   }
   if (res.status === 401) {
-    // Only the token this request was sent with can be declared expired: a request that left before sign-in
-    // finished (no token, or an older one) must not wipe the token a newer sign-in has stored since. A 401 from
+    // Only the session this request was sent with can be declared expired: a request that left before sign-in
+    // finished (no session, or an older one) must not end the session a newer sign-in has started since. A 401 from
     // the login/register endpoints means bad credentials, not an expired session, so it never signs anyone out.
-    if (token && getToken() === token && !path.startsWith("/auth/login") && !path.startsWith("/auth/register")) onUnauthorized();
-    throw new ApiError(401, token ? "Your session expired. Please sign in again." : "Sign in to continue.");
+    if (session && getSessionKey() === session && !path.startsWith("/auth/login") && !path.startsWith("/auth/register")) onUnauthorized();
+    throw new ApiError(401, session ? "Your session expired. Please sign in again." : "Sign in to continue.");
   }
   if (res.status === 204) return null;
   const isJson = (res.headers.get("content-type") || "").includes("application/json");
   const payload = isJson ? await res.json().catch(() => null) : await res.text().catch(() => null);
-  if (!res.ok) throw new ApiError(res.status, (payload && payload.message) || `Request failed (${res.status}) on ${method} ${path}`);
+  if (!res.ok) throw new ApiError(res.status, (payload && payload.message) || `Request failed (${res.status}) on ${method} ${path}`, payload && payload.code);
   return payload;
 }
 
@@ -60,6 +92,11 @@ export const api = {
   resetPassword: (token, password) => post("/auth/reset", { token, password }), // signs in on success
   userResetToken: (id) => post(`/users/${id}/reset-token`), // admin: one-time reset link (also e-mailed when SMTP is on)
   changePassword: (currentPassword, newPassword) => post("/auth/password", { currentPassword, newPassword }), // signed-in, proves the current password
+  session: () => get("/auth/session"), // who is signed in, and how ("password" | "workeasy360"); 401 = nobody
+  ssoConfig: () => get("/auth/workeasy360/config"), // public: whether "Continue with WorkEasy360" is offered, SSO-only
+  logoutSession: () => post("/auth/logout"), // ends the server-side session (WorkEasy360 sign-ins); 204
+  workeasy360StartUrl: ({ next, organization } = {}) => `${API_BASE}/auth/workeasy360/start?${new URLSearchParams({ ...(next && { next }), ...(organization && { organization }) })}`,
+  workeasy360LogoutUrl: () => `${API_BASE}/auth/workeasy360/logout`, // then WorkEasy360's end_session_endpoint
 
   // users / settings
   users: (role) => get("/users" + (role ? `?role=${role}` : "")),
@@ -120,7 +157,9 @@ export const api = {
   getVideo: (id) => get(`/videos/${id}`),
   updateVideo: (id, patch) => put(`/videos/${id}`, patch),
   deleteVideo: (id) => del(`/videos/${id}`),
-  videoStreamUrl: (id) => `${API_BASE}/videos/${id}/stream?access_token=${encodeURIComponent(getToken() || "")}`,
+  // A password session passes its token in the URL (a <video> cannot send headers); a WorkEasy360 session needs nothing:
+  // the browser sends its cookie.
+  videoStreamUrl: (id) => `${API_BASE}/videos/${id}/stream` + (getToken() ? `?access_token=${encodeURIComponent(getToken())}` : ""),
 
   // enrollment / progress
   enroll: (courseId, dueAt) => post(`/courses/${courseId}/enroll`, { dueAt }),
