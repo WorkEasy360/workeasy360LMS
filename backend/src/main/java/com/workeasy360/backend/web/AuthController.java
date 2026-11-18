@@ -21,12 +21,14 @@ public class AuthController {
     private final com.workeasy360.backend.service.PasswordResetService passwordResets;
     private final com.workeasy360.backend.service.MailService mail;
     private final com.workeasy360.backend.service.EntitlementService entitlements;
+    private final com.workeasy360.backend.sso.PasswordSignInPolicy passwords;
 
     public AuthController(UserRepo users, PasswordEncoder encoder, JwtService jwt, com.workeasy360.backend.service.NotificationService notifications,
                           com.workeasy360.backend.service.PasswordResetService passwordResets, com.workeasy360.backend.service.MailService mail,
-                          com.workeasy360.backend.service.EntitlementService entitlements) {
+                          com.workeasy360.backend.service.EntitlementService entitlements,
+                          com.workeasy360.backend.sso.PasswordSignInPolicy passwords) {
         this.users = users; this.encoder = encoder; this.jwt = jwt; this.notifications = notifications;
-        this.passwordResets = passwordResets; this.mail = mail; this.entitlements = entitlements;
+        this.passwordResets = passwordResets; this.mail = mail; this.entitlements = entitlements; this.passwords = passwords;
     }
 
     // Brute-force throttle: after MAX_FAILS wrong passwords for one account the account pauses for LOCK_MS.
@@ -51,6 +53,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest req) {
+        passwords.requirePasswordsAllowed(); // WORKEASY360_SSO_ONLY: WorkEasy360 is the only way in
         String email = req.email().trim().toLowerCase();
         requireNotLocked(email);
         User u = users.findByEmailIgnoreCase(email).orElseThrow(() -> failed(email));
@@ -68,6 +71,7 @@ public class AuthController {
 
     @PostMapping("/register")
     public LoginResponse register(@RequestBody RegisterRequest req) {
+        passwords.requirePasswordsAllowed();
         String name = req == null || req.name() == null ? "" : req.name().trim();
         String email = req == null || req.email() == null ? "" : req.email().trim().toLowerCase();
         String password = req == null || req.password() == null ? "" : req.password();
@@ -92,13 +96,16 @@ public class AuthController {
 
     @PostMapping("/forgot")
     public ForgotResponse forgot(@RequestBody ForgotRequest req) {
+        passwords.requirePasswordsAllowed();
         String email = req == null || req.email() == null ? "" : req.email().trim().toLowerCase();
         if (!email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$")) throw ApiException.badRequest("Enter the e-mail address you sign in with.");
         if (forgotRequests.size() > 10_000) forgotRequests.entrySet().removeIf(e -> System.currentTimeMillis() - e.getValue()[1] > 3_600_000L);
         long[] f = forgotRequests.compute(email, (k, v) -> v == null || System.currentTimeMillis() - v[1] > 3_600_000L ? new long[]{1, System.currentTimeMillis()} : new long[]{v[0] + 1, v[1]});
         if (f[0] > 3) throw new ApiException(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, "Too many reset requests for this address. Try again later, or ask your administrator.");
         if (!mail.enabled()) return new ForgotResponse(false);
-        users.findByEmailIgnoreCase(email).filter(u -> !"INACTIVE".equalsIgnoreCase(u.getStatus())).ifPresent(u -> {
+        // An account that signs in with WorkEasy360 has no password to reset: nothing is sent, and the answer is the same.
+        users.findByEmailIgnoreCase(email).filter(u -> !"INACTIVE".equalsIgnoreCase(u.getStatus()))
+                .filter(u -> !passwords.signsInWithWorkeasy360(u.getId())).ifPresent(u -> {
             String token = passwordResets.issue(u.getId(), null);
             String base = mail.publicUrl();
             String link = (base.isBlank() ? "" : base + "/") + "#/reset/" + token;
@@ -114,6 +121,7 @@ public class AuthController {
 
     @PostMapping("/reset")
     public LoginResponse reset(@RequestBody ResetRequest req) {
+        passwords.requirePasswordsAllowed();
         User u = passwordResets.reset(req == null ? null : req.token(), req == null ? null : req.password());
         if ("INACTIVE".equalsIgnoreCase(u.getStatus())) throw ApiException.badRequest("That reset link is no longer valid. Request a new one.");
         entitlements.requireSignInAllowed(u.getOrgId());
@@ -128,6 +136,7 @@ public class AuthController {
     public void changePassword(@AuthenticationPrincipal CurrentUser principal, @RequestBody ChangePasswordRequest req) {
         if (principal == null) throw new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Sign in to continue");
         User u = users.findById(principal.getId()).orElseThrow(() -> ApiException.notFound("User"));
+        passwords.requirePasswordAccount(u.getId());
         if (req == null || req.currentPassword() == null || !encoder.matches(req.currentPassword(), u.getPasswordHash()))
             throw ApiException.badRequest("Your current password isn't right.");
         String p = req.newPassword() == null ? "" : req.newPassword();

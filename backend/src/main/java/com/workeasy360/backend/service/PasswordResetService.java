@@ -32,13 +32,17 @@ public class PasswordResetService {
     private final PasswordResetRepo resets;
     private final UserRepo users;
     private final PasswordEncoder encoder;
+    private final com.workeasy360.backend.sso.PasswordSignInPolicy passwords;
 
-    public PasswordResetService(PasswordResetRepo resets, UserRepo users, PasswordEncoder encoder) {
-        this.resets = resets; this.users = users; this.encoder = encoder;
+    public PasswordResetService(PasswordResetRepo resets, UserRepo users, PasswordEncoder encoder,
+                                com.workeasy360.backend.sso.PasswordSignInPolicy passwords) {
+        this.resets = resets; this.users = users; this.encoder = encoder; this.passwords = passwords;
     }
 
-    /** Issues a fresh token for the user and returns the RAW token (never stored). Previous unused tokens stop working. */
+    /** Issues a fresh token for the user and returns the RAW token (never stored). Previous unused tokens stop working.
+     *  Refused under SSO-only and for an account that signs in with WorkEasy360 (it has no password to set). */
     public String issue(String userId, String createdByAdminId) {
+        passwords.requirePasswordAccount(userId);
         Instant now = Instant.now();
         for (PasswordReset old : resets.findByUserIdAndUsedAtIsNull(userId)) { old.setUsedAt(now); resets.save(old); }
         byte[] raw = new byte[32];
@@ -58,6 +62,7 @@ public class PasswordResetService {
         if (password == null || password.length() < 8 || password.length() > 128 || !password.matches(".*[A-Za-z].*") || !password.matches(".*\\d.*"))
             throw ApiException.badRequest("Use a password of at least 8 characters with at least one letter and one number.");
         User u = users.findById(pr.getUserId()).orElseThrow(() -> ApiException.badRequest("That reset link is no longer valid. Request a new one."));
+        passwords.requirePasswordAccount(u.getId()); // a link issued before the account was linked to WorkEasy360 sets nothing
         pr.setUsedAt(Instant.now());
         resets.save(pr);
         u.setPasswordHash(encoder.encode(password));

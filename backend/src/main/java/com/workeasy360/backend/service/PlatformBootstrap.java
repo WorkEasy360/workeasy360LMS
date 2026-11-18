@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
  * environment values set, nothing is created (development uses the seeded platform fixture instead).
  */
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "lms.operator-mode", havingValue = "false", matchIfMissing = true) // not for `w360sso` commands
 @Order(90)
 public class PlatformBootstrap implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(PlatformBootstrap.class);

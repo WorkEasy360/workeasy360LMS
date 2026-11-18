@@ -17,6 +17,21 @@ server:
   port: ${SERVER_PORT:8080}
   error:
     include-message: always
+  servlet:
+    session:
+      # The server-side session a WorkEasy360 sign-in creates (password sign-ins keep their bearer token and never get
+      # one). Idle timeout: a person away longer than this signs in again; access ending in WorkEasy360 is enforced
+      # separately, by back-channel logout at once and by the entitlement check within 15 minutes.
+      timeout: ${LMS_SESSION_IDLE_TIMEOUT:8h}
+      tracking-modes: cookie
+      cookie:
+        # __Host- prefix (only valid with Secure, path / and no Domain): host-only, and a sibling subdomain cannot
+        # plant or overwrite it. There is never a .workeasy360.com cookie. Local profiles (plain http) use a plain name.
+        name: ${LMS_SESSION_COOKIE_NAME:__Host-lms_session}
+        http-only: true
+        same-site: lax
+        path: /
+        secure: ${LMS_SESSION_COOKIE_SECURE:true}
 
 app:
   jwt:
@@ -58,9 +73,34 @@ app:
     ssl: ${SMTP_SSL:}                        # implicit SSL; defaults to true on port 465, false otherwise
   public-url: ${APP_PUBLIC_URL:}             # absolute base for links in e-mails, e.g. https://lms.example.com
 
+# Sign in with WorkEasy360 Accounts (docs/workeasy360-sso.md). The environment variables WORKEASY360_ISSUER,
+# WORKEASY360_CLIENT_ID, WORKEASY360_REDIRECT_URI, WORKEASY360_KEY_ID, WORKEASY360_PRIVATE_KEY_FILE (or
+# WORKEASY360_PRIVATE_KEY), WORKEASY360_PRODUCT_CODE, WORKEASY360_POST_LOGOUT_REDIRECT_URI, WORKEASY360_SSO_ONLY and
+# WORKEASY360_AUTO_PROVISION bind to these properties. With none of the first five set, WorkEasyLMS runs exactly as
+# before (password sign-in only); with some but not all of them, it refuses to start.
+workeasy360:
+  product-code: ${WORKEASY360_PRODUCT_CODE:workeasy_lms}
+  sso-only: ${WORKEASY360_SSO_ONLY:false}
+  auto-provision: ${WORKEASY360_AUTO_PROVISION:true}
+  app-url: ${WORKEASY360_APP_URL:${APP_PUBLIC_URL:}}   # where the single-page app is; empty = this origin
+
 springdoc:
   swagger-ui:
     path: /docs
+
+---
+# Local profiles (dev, or `local` added to any other, e.g. APP_PROFILE=postgres,local): plain http on localhost, so
+# the session cookie cannot be Secure and cannot carry the __Host- prefix; a loopback WorkEasy360 issuer is allowed.
+spring:
+  config:
+    activate:
+      on-profile: "dev | local"
+server:
+  servlet:
+    session:
+      cookie:
+        name: ${LMS_SESSION_COOKIE_NAME:lms_session}
+        secure: ${LMS_SESSION_COOKIE_SECURE:false}
 
 ---
 spring:

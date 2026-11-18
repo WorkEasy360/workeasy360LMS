@@ -20,7 +20,10 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequestMapping("/api/public")
 public class PublicController {
     private final PlanRepo plans; private final OrgProvisioningService provisioning;
-    public PublicController(PlanRepo plans, OrgProvisioningService provisioning) { this.plans = plans; this.provisioning = provisioning; }
+    private final com.workeasy360.backend.sso.PasswordSignInPolicy passwords;
+    public PublicController(PlanRepo plans, OrgProvisioningService provisioning, com.workeasy360.backend.sso.PasswordSignInPolicy passwords) {
+        this.plans = plans; this.provisioning = provisioning; this.passwords = passwords;
+    }
 
     public record PublicPlan(String id, String name, String description, int priceCents, String currency, String billingPeriod,
                              Integer maxUsers, Integer maxCourses, int trialDays) {}
@@ -40,6 +43,8 @@ public class PublicController {
 
     @PostMapping("/organizations")
     public Map<String, Object> register(@RequestBody RegisterOrgRequest req) {
+        // Under SSO-only an organization's people come from WorkEasy360, and its administrator would get a password link.
+        passwords.requirePasswordsAllowed();
         String email = req == null || req.adminEmail() == null ? "" : req.adminEmail().trim().toLowerCase();
         if (attempts.size() > 10_000) attempts.entrySet().removeIf(e -> System.currentTimeMillis() - e.getValue()[1] > 3_600_000L);
         long[] a = attempts.compute(email, (k, v) -> v == null || System.currentTimeMillis() - v[1] > 3_600_000L ? new long[]{1, System.currentTimeMillis()} : new long[]{v[0] + 1, v[1]});
