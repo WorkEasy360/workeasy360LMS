@@ -1,0 +1,30 @@
+# The backend tests (`mvn test`). They run against a real PostgreSQL when LMS_TEST_DB_URL is set (what production
+# uses; the multi-instance back-channel tests need one shared database), for example a throwaway container:
+#
+#   LMS_TEST_DB_URL=jdbc:postgresql://localhost:5432/lms_test  LMS_TEST_DB_USERNAME=postgres  LMS_TEST_DB_PASSWORD=...
+#
+# and otherwise against an in-memory H2 in PostgreSQL mode (the dev profile's engine), so the build needs nothing.
+spring:
+  datasource:
+    url: ${LMS_TEST_DB_URL:jdbc:h2:mem:lmstest;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;NON_KEYWORDS=VALUE,USER;DB_CLOSE_DELAY=-1}
+    username: ${LMS_TEST_DB_USERNAME:sa}
+    password: ${LMS_TEST_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+app:
+  jwt:
+    secret: lms-backend-tests-signing-secret-0123456789-abcdefghijklmnopqrstuvwxyz
+  seed:
+    enabled: false
+  storage:
+    root: ${java.io.tmpdir}/lms-test-storage
+
+logging:
+  level:
+    org.flywaydb: WARN
