@@ -67,7 +67,13 @@ unexpected errors return a generic 500 without internals. Flyway runs at startup
 | Instructor | Everything a learner can plus: create/edit own courses, enrol learners, review assignments, course analytics, AI drafting, pin discussions |
 | Admin | Everything plus: any course, publish/archive/delete, people management, skills library, certifications, org-wide analytics, settings, automation rules, platform status |
 
-Login (`POST /api/auth/login`) returns an HS256 JWT (`JWT_SECRET`, expiry `JWT_EXPIRY_MINUTES`) sent as
+**Sign in with WorkEasy360 Accounts** (the WorkEasy360 identity provider) is built in: OpenID Connect authorization
+code + PKCE with `private_key_jwt`, ending in a server-side session behind an httpOnly, Secure, SameSite=Lax cookie (no
+token reaches the browser), back-channel logout on every instance, and WorkEasy360's entitlement checked on its
+cadence. It is off until the `WORKEASY360_*` settings are present; password sign-in keeps working next to it unless
+`WORKEASY360_SSO_ONLY=true`. Registration, settings, operator commands and local runs: [docs/workeasy360-sso.md](docs/workeasy360-sso.md).
+
+Password login (`POST /api/auth/login`) returns an HS256 JWT (`JWT_SECRET`, expiry `JWT_EXPIRY_MINUTES`) sent as
 `Authorization: Bearer …`. Passwords are BCrypt-hashed. Only `/api/auth/**`, certificate verification and the API docs
 are public. A missing, expired or invalid token yields `401`; a valid token with the wrong role yields `403`. Deactivated people (`status = INACTIVE`) cannot sign in. Ownership is checked server-side for every
 per-user resource (progress, notifications, coach conversations, plans, submissions, certificate renewal); e-mail
@@ -128,6 +134,12 @@ Copy `backend/.env.example` and export the values (never commit real secrets).
 | `PAYMENTS_MOCK_ALLOWED` | `false` | Must be `true` for the mock provider to work; never in production |
 | `PAYMENTS_API_KEY`, `PAYMENTS_WEBHOOK_SECRET` | – | Credentials for a real provider; environment only |
 | `PAYMENTS_CURRENCY` | `INR` | Default currency for new prices |
+| `WORKEASY360_ISSUER`, `WORKEASY360_CLIENT_ID`, `WORKEASY360_REDIRECT_URI`, `WORKEASY360_KEY_ID`, `WORKEASY360_PRIVATE_KEY_FILE` (or `WORKEASY360_PRIVATE_KEY`) | none | Sign in with WorkEasy360 Accounts. All or none: some but not all refuses to start. See [docs/workeasy360-sso.md](docs/workeasy360-sso.md) |
+| `WORKEASY360_PRODUCT_CODE`, `WORKEASY360_POST_LOGOUT_REDIRECT_URI` | `workeasy_lms`, none | The product code the ID token must carry; the registered post-logout URI ("sign out of WorkEasy360 too") |
+| `WORKEASY360_SSO_ONLY` | `false` | `true` = WorkEasy360 is the only way in: password sign-in, sign-up, resets and bearer tokens are refused |
+| `WORKEASY360_AUTO_PROVISION` | `true` | A first sign-in from an unlinked WorkEasy360 organization creates its WorkEasyLMS organization; `false` = an operator links it first (`java -jar backend.jar w360sso link ...`) |
+| `WORKEASY360_LINK_BY_VERIFIED_EMAIL` | `false` | An existing account with the signing-in address is refused (`account_conflict`) until an operator links it (`w360sso link-user ... --actor= --reason=`); `true` = the sign-in links it, same organization only, never a linked account, audited |
+| `LMS_SESSION_IDLE_TIMEOUT` | `8h` | Idle timeout of a WorkEasy360 sign-in's server-side session |
 
 Frontend: the API base is `http://localhost:8080/api` by default; for another host set
 `window.WE360_API_BASE = "https://api.example.com/api"` in a `<script>` before `src/app.js` in `index.html`.
@@ -310,6 +322,7 @@ provider and CORS without secrets.
 | Layer | How |
 | --- | --- |
 | Backend compile | `cd backend && mvn -q -DskipTests compile` |
+| Backend tests (WorkEasy360 sign-in, back-channel logout, entitlement, tenancy) | `cd backend && mvn -B test` with `LMS_TEST_DB_URL` / `LMS_TEST_DB_USERNAME` / `LMS_TEST_DB_PASSWORD` naming a throwaway PostgreSQL (without them the database tests are skipped); see [docs/workeasy360-sso.md](docs/workeasy360-sso.md) §11 |
 | API smoke / security | curl against `/api/...` (401 without token, 403 for wrong role, 404/409 guards) |
 | Browser regression (71 suites) | `index.html?as=<role>&selftest=<suite>` — see below |
 

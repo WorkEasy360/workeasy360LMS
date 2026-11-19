@@ -11,17 +11,21 @@ import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The live account state behind a token. A JWT is valid for hours, so its claims alone would let a deactivated or
- * deleted person, a demoted admin, or everyone in a suspended organization keep working until it expires. Every
- * authenticated request is checked against the database instead (cached briefly; evicted the moment an admin or the
- * platform owner changes someone), and the role and organization come from the database, not from the token.
+ * The live account state behind a token or a WorkEasy360 session. A JWT is valid for hours, so its claims alone
+ * would let a deactivated or deleted person, a demoted admin, or everyone in a suspended organization keep working
+ * until it expires. Every authenticated request is checked against the database instead (cached briefly; evicted the
+ * moment an admin or the platform owner changes someone), and the role and organization come from the database, not
+ * from the token or the session.
  */
 @Component
 public class SessionGuard {
     private static final long TTL_MS = 15_000;
 
-    /** What a request may run as; null = the token no longer grants access. */
-    public record Live(Enums.Role role, String orgId) {}
+    /**
+     * What a request may run as; null = the token no longer grants access.
+     * {@code tokensValidAfter}: bearer tokens issued before it are refused (the account was linked to WorkEasy360).
+     */
+    public record Live(Enums.Role role, String orgId, Instant tokensValidAfter) {}
     private record Entry(Live live, long at) {}
 
     private final UserRepo users; private final OrganizationRepo orgs; private final SubscriptionRepo subscriptions;
@@ -55,7 +59,7 @@ public class SessionGuard {
                 if ("TRIAL".equals(st) && s.getTrialEndsAt() != null && s.getTrialEndsAt().isBefore(Instant.now())) return null;
             }
         }
-        return new Live(u.getRole(), org);
+        return new Live(u.getRole(), org, u.getTokensValidAfter());
     }
 
     /** Apply a change to this person immediately (deactivation, deletion, role change). */

@@ -8,9 +8,10 @@ import { Button } from "../components/Button.js";
 import { Badge } from "../components/Badge.js";
 import { openDrawer, openModal, confirmDialog, toast } from "../components/Overlay.js";
 import { Field, Input } from "../components/Form.js";
-import { api } from "../services/api.js";
+import { api, hasWorkeasy360Session } from "../services/api.js";
+import { ssoConfig } from "../services/sso.js";
 import { EmptyState } from "../components/States.js";
-import { getUser, login, logout, resetAll, DEMO_USER_BY_ROLE, DEMO_ENABLED } from "../lib/store.js";
+import { getUser, login, logout, signOut, resetAll, DEMO_USER_BY_ROLE, DEMO_ENABLED } from "../lib/store.js";
 import { unreadCount, notificationsFor, markRead, initials } from "../services/people.js";
 import { ProductLogo, ProductMark } from "../components/Brand.js";
 import { initAgent, updateAgent } from "../components/Agent.js";
@@ -90,12 +91,18 @@ export function renderTopbar(pageMeta = {}, path = "/") {
         ...Object.keys(ROLE_LABEL).map((r) => ({ label: ROLE_LABEL[r], icon: r === user.role ? "check" : "user", onClick: () => { if (r !== user.role) { login(DEMO_USER_BY_ROLE[r]); navigate("/", { replace: true }); } } })),
         "sep",
         { label: "Reset demo data", icon: "refresh", onClick: async () => { if (await confirmDialog({ title: "Reset demo data?", message: "This restores all courses, progress, posts and guides to their original state.", confirmLabel: "Reset", danger: true })) { resetAll(); logout(); location.hash = "#/login"; location.reload(); } } },
+      ] : hasWorkeasy360Session() ? [
+        // A WorkEasy360 sign-in has no WorkEasyLMS password: it is managed in WorkEasy360.
       ] : [
         // Real accounts manage their own password here; demo accounts share a published one, so they don't.
         { label: "Change password", icon: "shield", onClick: () => changePasswordDialog() },
         "sep",
       ]),
-      { label: "Sign out", icon: "logout", onClick: () => { guideEngine.close(); logout(); navigate("/login"); } },
+      // "Sign out" ends the WorkEasyLMS session only; the second item also signs out of WorkEasy360 (its own page).
+      { label: "Sign out", icon: "logout", onClick: async () => { guideEngine.close(); await signOut(); navigate("/login"); } },
+      ...(hasWorkeasy360Session() && ssoConfig()?.workeasy360SignOut ? [
+        { label: "Sign out of WorkEasyLMS and WorkEasy360", icon: "logout", onClick: async () => { guideEngine.close(); if (!(await signOut({ workeasy360: true }))) navigate("/login"); } },
+      ] : []),
     ],
     renderTrigger: ({ onClick }) => h("button", { class: "user-btn", type: "button", onclick: onClick, "aria-label": `Account menu for ${user.name}` }, [
       h("span", { class: "brand-avatar", "aria-hidden": "true" }, initials(user.name)),

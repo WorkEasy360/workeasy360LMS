@@ -7,7 +7,8 @@ import { Button } from "../components/Button.js";
 import { Field, Input } from "../components/Form.js";
 import { login, DEMO_USER_BY_ROLE, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, DEMO_ENABLED, loginReal } from "../lib/store.js";
 import { userById } from "../services/people.js";
-import { navigate } from "../router.js";
+import { navigate, currentRoute } from "../router.js";
+import { loadSsoConfig, startWorkeasy360SignIn, ssoErrorMessage } from "../services/sso.js";
 
 const ROLES = [
   { role: "learner", icon: "cap", title: "Learner", desc: "Continue courses, build skills, join the community.", perks: ["Personal dashboard", "Learning journeys", "Certificates"] },
@@ -52,6 +53,23 @@ export function LoginPage(root) {
     h("p", { class: "small muted center", style: "margin:4px 0 0" }, [h("a", { href: "#/forgot", "data-login-forgot": "" }, "Forgot password?"), " · Don't have an account? ", h("a", { href: "#/signup", "data-login-signup": "" }, "Create Account")]),
     h("p", { class: "small muted center", style: "margin:2px 0 0" }, ["New company? ", h("a", { href: "#/signup-org", "data-login-org-signup": "" }, "Start your organisation")]),
   ]);
+
+  // "Continue with WorkEasy360" when the backend offers it. Never started automatically from this page (integration
+  // guide 6a/6b): the person chooses. With WorkEasyLMS SSO-only the password form is not offered at all.
+  const ssoError = ssoErrorMessage(currentRoute().query?.sso_error);
+  const ssoNotice = h("div", { class: "hint", role: "alert", style: "color:var(--c-danger)", hidden: !ssoError, "data-sso-error": "" }, ssoError || "");
+  const ssoButton = Button({ label: "Continue with WorkEasy360", variant: "primary", attrs: { type: "button", "data-sso-start": "" }, onClick: () => startWorkeasy360SignIn({ next: currentRoute().query?.next }) });
+  const ssoBox = h("div", { class: "stack-sm", hidden: true, "data-sso": "" }, [ssoButton, h("p", { class: "small muted center", style: "margin:4px 0 0", "data-sso-or": "" }, "or sign in with your WorkEasyLMS password")]);
+  form.firstElementChild.after(ssoNotice, ssoBox); // under the "Sign in" heading
+  loadSsoConfig().then((config) => {
+    if (!config?.enabled) return;
+    ssoBox.hidden = false;
+    if (config.ssoOnly) {
+      // Only WorkEasy360: the password fields, the account links and the "or" line go.
+      [...form.children].forEach((el) => { if (el !== ssoNotice && el !== ssoBox && el.tagName !== "H2") el.hidden = true; });
+      ssoBox.querySelector("[data-sso-or]").hidden = true;
+    }
+  });
 
   mount(root, h("div", { class: "login login-auth" }, [
     h("div", { class: "login-inner" }, [

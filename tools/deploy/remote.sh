@@ -5,7 +5,7 @@
 #   sudo bash remote.sh backup                  pg_dump + verified test-restore into a throwaway database; records data counts
 #   sudo bash remote.sh deploy <sha>            install /tmp/backend-<sha>.jar (+ .sha256) and frontend at <sha>; restart backend
 #   sudo bash remote.sh verify                  health, routing, Flyway, data preserved, auth, SSE through Nginx, payment config
-#   sudo bash remote.sh set-env < settings      add/replace KEY=VALUE lines (SMTP_*, AI_*, APP_PUBLIC_URL, PLATFORM_ADMIN_*) in the env file
+#   sudo bash remote.sh set-env < settings      add/replace KEY=VALUE lines (SMTP_*, AI_*, APP_PUBLIC_URL, PLATFORM_ADMIN_*, WORKEASY360_*) in the env file
 #   sudo bash remote.sh harden                  auto-restart + start at boot, hang watchdog, swap, log cap, nightly DB backups
 #   sudo bash remote.sh rollback                previous jar + previous frontend (schema changes are additive: no data restore)
 #   sudo bash remote.sh restore-db <dumpfile>   LAST RESORT: restore a dump into a new database and swap it in (old one kept)
@@ -245,7 +245,9 @@ EOF
 # Reads KEY=VALUE lines from stdin and writes them into the env file, replacing earlier (or commented-out) lines for
 # the same key. Only the settings named here can be changed this way; values are never printed. Takes effect at the
 # next backend restart (deploy restarts it).
-SETTABLE="SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM SMTP_SSL SMTP_STARTTLS APP_PUBLIC_URL PLATFORM_ADMIN_EMAIL PLATFORM_ADMIN_PASSWORD AI_ENABLED AI_PROVIDER AI_API_KEY AI_MODEL AI_BASE_URL AI_REASONING_EFFORT"
+# WORKEASY360_*: sign in with WorkEasy360 (docs/workeasy360-sso.md). The private key itself is never set this
+# way: it is a file on the host (WORKEASY360_PRIVATE_KEY_FILE names it), readable only by the service user.
+SETTABLE="SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM SMTP_SSL SMTP_STARTTLS APP_PUBLIC_URL PLATFORM_ADMIN_EMAIL PLATFORM_ADMIN_PASSWORD AI_ENABLED AI_PROVIDER AI_API_KEY AI_MODEL AI_BASE_URL AI_REASONING_EFFORT WORKEASY360_ISSUER WORKEASY360_CLIENT_ID WORKEASY360_REDIRECT_URI WORKEASY360_KEY_ID WORKEASY360_PRIVATE_KEY_FILE WORKEASY360_PRODUCT_CODE WORKEASY360_POST_LOGOUT_REDIRECT_URI WORKEASY360_SSO_ONLY WORKEASY360_AUTO_PROVISION"
 set_env() {
   [ -t 0 ] && { echo "pipe KEY=VALUE lines in on stdin"; exit 1; }
   umask 077

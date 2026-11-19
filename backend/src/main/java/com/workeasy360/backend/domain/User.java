@@ -35,6 +35,10 @@ public class User {
     @Column(name = "org_id", nullable = false, length = 40)
     private String orgId;
 
+    /** Bearer tokens issued before this are refused (set when the account is linked to WorkEasy360; V12). */
+    @Column(name = "tokens_valid_after")
+    private Instant tokensValidAfter;
+
     @Column(name = "created_at", nullable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
 

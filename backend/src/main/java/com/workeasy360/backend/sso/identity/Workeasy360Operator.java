@@ -1,0 +1,316 @@
+package com.workeasy360.backend.sso.identity;
+
+import com.workeasy360.backend.domain.Enums.Role;
+import com.workeasy360.backend.domain.Organization;
+import com.workeasy360.backend.domain.User;
+import com.workeasy360.backend.repo.Repos.OrganizationRepo;
+import com.workeasy360.backend.repo.Repos.UserRepo;
+import com.workeasy360.backend.service.AuditService;
+import com.workeasy360.backend.sso.Workeasy360Properties;
+import java.io.PrintStream;
+import java.time.Clock;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/**
+ * Operator commands for the WorkEasy360 links, run from the application jar with the service's own environment,
+ * without starting the web server ({@code java -jar backend.jar w360sso <command> ...}; docs/workeasy360-sso.md):
+ *
+ * <pre>
+ *   w360sso list                                                       every organization and what it is linked to
+ *   w360sso link --workeasy360-organization=&lt;uuid&gt; --organization=&lt;org id&gt;   link an existing WorkEasyLMS organization
+ *   w360sso unlink --workeasy360-organization=&lt;uuid&gt;                         remove a link (people stay; see the docs)
+ *   w360sso link-user --user=&lt;user id or e-mail&gt; --workeasy360-organization=&lt;uuid&gt; --subject=&lt;sub&gt;
+ *                     --actor=&lt;who&gt; --reason=&lt;why&gt;                   link one existing account to a WorkEasy360 person
+ *   w360sso move-issuer --from=&lt;issuer&gt; --to=&lt;issuer&gt;                      the identity-link move of an issuer move
+ * </pre>
+ *
+ * {@code --issuer=} overrides the issuer a link is made under (default: {@code WORKEASY360_ISSUER}). Every change is
+ * audited as {@code workeasy360.operator.*}. Exit status 0 on success, 1 when refused, 2 on a usage error.
+ *
+ * <p>{@code link-user} is how an existing WorkEasyLMS account gets its WorkEasy360 sign-in: a sign-in whose address
+ * matches an account is refused unless {@code WORKEASY360_LINK_BY_VERIFIED_EMAIL} is on. The operator vouches that
+ * the account and the WorkEasy360 person ({@code sub}, from WorkEasy360 Accounts) are the same person, in the stated
+ * WorkEasy360 organization, which must be linked to the account's own organization. Refused when the account is linked
+ * already or the person is linked to another account. Audited with the actor and the reason; the account's password
+ * and sessions are left as they are ({@code WORKEASY360_SSO_ONLY} retires password sign-in).
+ */
+public final class Workeasy360Operator {
+
+    public static final String COMMAND = "w360sso";
+
+    private final OrganizationLinks links;
+    private final FederatedIdentities identities;
+    private final OrganizationRepo orgs;
+    private final UserRepo users;
+    private final AuditService audit;
+    private final Workeasy360Properties properties;
+    private final TransactionTemplate transactions;
+    private final Clock clock;
+    private final PrintStream out;
+
+    Workeasy360Operator(OrganizationLinks links, FederatedIdentities identities, OrganizationRepo orgs, UserRepo users,
+                        AuditService audit, Workeasy360Properties properties, PlatformTransactionManager transactionManager,
+                        Clock clock, PrintStream out) {
+        this.links = links;
+        this.identities = identities;
+        this.orgs = orgs;
+        this.users = users;
+        this.audit = audit;
+        this.properties = properties;
+        this.transactions = new TransactionTemplate(transactionManager);
+        this.clock = clock;
+        this.out = out;
+    }
+
+    /** Starts the application without a web server, runs one command, stops it. Returns the exit status. */
+    public static int run(Class<?> application, String[] args) {
+        SpringApplication spring = new SpringApplication(application);
+        spring.setWebApplicationType(WebApplicationType.NONE);
+        spring.setBannerMode(org.springframework.boot.Banner.Mode.OFF);
+        spring.setDefaultProperties(Map.of("lms.operator-mode", "true", "spring.main.log-startup-info", "false"));
+        try (ConfigurableApplicationContext context = spring.run()) {
+            return from(context, System.out).execute(args);
+        }
+    }
+
+    public static Workeasy360Operator from(ConfigurableApplicationContext context, PrintStream out) {
+        return new Workeasy360Operator(context.getBean(OrganizationLinks.class), context.getBean(FederatedIdentities.class),
+                context.getBean(OrganizationRepo.class), context.getBean(UserRepo.class), context.getBean(AuditService.class),
+                context.getBean(Workeasy360Properties.class), context.getBean(PlatformTransactionManager.class),
+                context.getBean(Clock.class), out);
+    }
+
+    public int execute(String[] args) {
+        if (args.length == 0) {
+            return usage();
+        }
+        Map<String, String> options = options(args);
+        try {
+            return switch (args[0]) {
+                case "list" -> list();
+                case "link" -> link(options);
+                case "unlink" -> unlink(options);
+                case "link-user" -> linkUser(options);
+                case "move-issuer" -> moveIssuer(options);
+                default -> usage();
+            };
+        } catch (IllegalArgumentException invalid) {
+            out.println("error: " + invalid.getMessage());
+            return 2;
+        }
+    }
+
+    private int list() {
+        Map<String, OrganizationLinks.Link> byOrg = new LinkedHashMap<>();
+        for (OrganizationLinks.Link link : links.list()) {
+            byOrg.put(link.orgId(), link);
+        }
+        out.printf("%-20s %-10s %-36s %-14s %s%n", "ORGANIZATION", "STATUS", "WORKEASY360 ORGANIZATION", "LINKED BY", "NAME");
+        for (Organization org : orgs.findAll()) {
+            if (Organization.PLATFORM.equals(org.getId())) {
+                continue;
+            }
+            OrganizationLinks.Link link = byOrg.get(org.getId());
+            out.printf("%-20s %-10s %-36s %-14s %s%n", org.getId(), org.getStatus(),
+                    link == null ? "-" : link.workeasy360OrgId(), link == null ? "-" : link.linkedBy(), org.getName());
+        }
+        return 0;
+    }
+
+    private int link(Map<String, String> options) {
+        UUID workeasy360Org = uuid(options.get("workeasy360-organization"));
+        String orgId = required(options, "organization");
+        String issuer = issuer(options);
+        Optional<Organization> org = orgs.findById(orgId);
+        if (org.isEmpty() || Organization.PLATFORM.equals(orgId)) {
+            out.println("refused: no customer organization " + orgId);
+            return 1;
+        }
+        Optional<OrganizationLinks.Link> existing = links.find(issuer, workeasy360Org);
+        if (existing.isPresent()) {
+            out.println("refused: WorkEasy360 organization " + workeasy360Org + " is already linked to " + existing.get().orgId());
+            return 1;
+        }
+        Optional<OrganizationLinks.Link> taken = links.forOrganization(orgId);
+        if (taken.isPresent()) {
+            out.println("refused: " + orgId + " is already linked to WorkEasy360 organization " + taken.get().workeasy360OrgId());
+            return 1;
+        }
+        try {
+            transactions.executeWithoutResult(status -> {
+                links.insert(issuer, workeasy360Org, orgId, OrganizationLinks.BY_OPERATOR, clock.instant());
+                audit.record(null, orgId, "workeasy360.operator.link", "linked to WorkEasy360 organization " + workeasy360Org);
+            });
+        } catch (DataIntegrityViolationException raced) {
+            out.println("refused: one side was linked meanwhile");
+            return 1;
+        }
+        out.println("linked " + orgId + " (" + org.get().getName() + ") to WorkEasy360 organization " + workeasy360Org
+                + " under " + issuer);
+        return 0;
+    }
+
+    /** Links one existing account to a WorkEasy360 person, vouched for by the operator (see the class comment). */
+    private int linkUser(Map<String, String> options) {
+        String account = required(options, "user");
+        UUID workeasy360Org = uuid(options.get("workeasy360-organization"));
+        String subject = bounded(options, "subject", 255);
+        String actor = bounded(options, "actor", 200);
+        String reason = bounded(options, "reason", 500);
+        String issuer = issuer(options);
+
+        Optional<User> found = account.contains("@") ? users.findByEmailIgnoreCase(account) : users.findById(account);
+        if (found.isEmpty()) {
+            out.println("refused: no account " + account);
+            return 1;
+        }
+        User user = found.get();
+        if (user.getRole() == Role.PLATFORM || Organization.PLATFORM.equals(user.getOrgId())) {
+            out.println("refused: the platform owner account is never linked");
+            return 1;
+        }
+        if ("INACTIVE".equalsIgnoreCase(user.getStatus())) {
+            out.println("refused: account " + user.getId() + " is deactivated");
+            return 1;
+        }
+        Optional<OrganizationLinks.Link> link = links.find(issuer, workeasy360Org);
+        if (link.isEmpty()) {
+            out.println("refused: WorkEasy360 organization " + workeasy360Org + " is not linked under " + issuer
+                    + "; link its WorkEasyLMS organization first (w360sso link)");
+            return 1;
+        }
+        if (!link.get().orgId().equals(user.getOrgId())) {
+            out.println("refused: account " + user.getId() + " belongs to another organization (" + user.getOrgId()
+                    + ") than the one WorkEasy360 organization " + workeasy360Org + " is linked to (" + link.get().orgId() + ")");
+            return 1;
+        }
+        Optional<FederatedIdentities.Identity> linked = identities.forUser(user.getId());
+        if (linked.isPresent()) {
+            out.println("refused: account " + user.getId() + " is already linked to WorkEasy360 person "
+                    + linked.get().subject() + " under " + linked.get().issuer());
+            return 1;
+        }
+        Optional<FederatedIdentities.Identity> taken = identities.find(issuer, subject);
+        if (taken.isPresent()) {
+            out.println("refused: WorkEasy360 person " + subject + " is already linked to account " + taken.get().userId());
+            return 1;
+        }
+        String detail = "account " + user.getId() + " (" + user.getEmail() + ") linked to WorkEasy360 person " + subject
+                + " of organization " + workeasy360Org + " under " + issuer + " by " + actor + ", reason: " + reason
+                + "; password and sessions kept";
+        try {
+            transactions.executeWithoutResult(status -> {
+                // Profile data (e-mail, name) is WorkEasy360's to report: the first sign-in fills it in.
+                identities.insert(issuer, subject, user.getId(), null, null, clock.instant());
+                audit.record(null, user.getOrgId(), "workeasy360.operator.link_user", detail);
+            });
+        } catch (DataIntegrityViolationException raced) {
+            out.println("refused: one side was linked meanwhile");
+            return 1;
+        }
+        out.println("linked account " + user.getId() + " (" + user.getEmail() + ") to WorkEasy360 person " + subject
+                + " under " + issuer);
+        return 0;
+    }
+
+    private int unlink(Map<String, String> options) {
+        UUID workeasy360Org = uuid(options.get("workeasy360-organization"));
+        String issuer = issuer(options);
+        Optional<OrganizationLinks.Link> existing = links.find(issuer, workeasy360Org);
+        if (existing.isEmpty()) {
+            out.println("refused: WorkEasy360 organization " + workeasy360Org + " is not linked under " + issuer);
+            return 1;
+        }
+        transactions.executeWithoutResult(status -> {
+            links.unlink(issuer, workeasy360Org);
+            audit.record(null, existing.get().orgId(), "workeasy360.operator.unlink",
+                    "unlinked from WorkEasy360 organization " + workeasy360Org);
+        });
+        out.println("unlinked " + existing.get().orgId() + " from WorkEasy360 organization " + workeasy360Org);
+        return 0;
+    }
+
+    private int moveIssuer(Map<String, String> options) {
+        String from = required(options, "from");
+        String to = required(options, "to");
+        if (from.equals(to)) {
+            throw new IllegalArgumentException("--from and --to are the same");
+        }
+        int[] moved = new int[2];
+        transactions.executeWithoutResult(status -> {
+            moved[0] = identities.moveIssuer(from, to);
+            moved[1] = links.moveIssuer(from, to);
+            audit.record(null, null, "workeasy360.operator.move_issuer",
+                    "moved " + moved[0] + " identities and " + moved[1] + " organization links from " + from + " to " + to);
+        });
+        out.println("moved " + moved[0] + " identities and " + moved[1] + " organization links from " + from + " to " + to);
+        return 0;
+    }
+
+    private String issuer(Map<String, String> options) {
+        String issuer = options.getOrDefault("issuer", properties.issuer());
+        if (issuer == null || issuer.isBlank()) {
+            throw new IllegalArgumentException("no issuer: set WORKEASY360_ISSUER or pass --issuer=");
+        }
+        return issuer;
+    }
+
+    private static UUID uuid(String value) {
+        if (value == null || value.length() != 36) {
+            throw new IllegalArgumentException("--workeasy360-organization must be the organization's UUID");
+        }
+        try {
+            return UUID.fromString(value.toLowerCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException invalid) {
+            throw new IllegalArgumentException("--workeasy360-organization must be the organization's UUID");
+        }
+    }
+
+    private static String required(Map<String, String> options, String name) {
+        String value = options.get(name);
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("--" + name + "= is required");
+        }
+        return value.strip();
+    }
+
+    private static String bounded(Map<String, String> options, String name, int max) {
+        String value = required(options, name);
+        if (value.length() > max) {
+            throw new IllegalArgumentException("--" + name + "= is longer than " + max + " characters");
+        }
+        return value;
+    }
+
+    private static Map<String, String> options(String[] args) {
+        Map<String, String> options = new LinkedHashMap<>();
+        for (String arg : List.of(args).subList(1, args.length)) {
+            if (arg.startsWith("--") && arg.contains("=")) {
+                options.put(arg.substring(2, arg.indexOf('=')), arg.substring(arg.indexOf('=') + 1));
+            }
+        }
+        return options;
+    }
+
+    private int usage() {
+        out.println("""
+                usage: java -jar backend.jar w360sso <command>
+                  list
+                  link --workeasy360-organization=<uuid> --organization=<org id> [--issuer=<issuer>]
+                  unlink --workeasy360-organization=<uuid> [--issuer=<issuer>]
+                  link-user --user=<user id or e-mail> --workeasy360-organization=<uuid> --subject=<sub>
+                            --actor=<who> --reason=<why> [--issuer=<issuer>]
+                  move-issuer --from=<issuer> --to=<issuer>""");
+        return 2;
+    }
+}

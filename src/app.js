@@ -1,5 +1,7 @@
 import { route, notFound, startRouter, navigate, refreshRoute, currentRoute } from "./router.js";
-import { getUser, login, DEMO_USER_BY_ROLE, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, DEMO_ENABLED, loginReal, isBackendOnline } from "./lib/store.js";
+import { getUser, login, DEMO_USER_BY_ROLE, DEMO_EMAIL_BY_ROLE, DEMO_PASSWORD, DEMO_ENABLED, loginReal, isBackendOnline, restoreWorkeasy360Session } from "./lib/store.js";
+import { getToken } from "./services/api.js";
+import { loadSsoConfig, shouldAutoStart, startWorkeasy360SignIn, clearAutoStart, isUuid } from "./services/sso.js";
 import { bus } from "./lib/events.js";
 import { hydrateMyCourses, hydrateCatalog } from "./services/courseSync.js";
 import { hydrateMyLearning } from "./services/learningSync.js";
@@ -129,7 +131,12 @@ function dispatch(match) {
     document.title = "Sign in · WorkEasyLMS";
     return;
   }
-  if (!user && !r?.opts.public) return navigate("/login", { replace: true });
+  if (!user && !r?.opts.public) {
+    // SSO-only: a page that needs a signed-in person starts a WorkEasy360 sign-in by itself (integration guide 6b),
+    // unless this browser just signed out or already tried a moment ago. Otherwise: the sign-in page, as before.
+    if (shouldAutoStart()) { startWorkeasy360SignIn({ next: location.hash.slice(1) || "/" }); return; }
+    return navigate("/login", { replace: true });
+  }
   if (!user) {
     // Public page (e.g. certificate verification) for signed-out visitors
     const page = r.handler({ ...match, user: null });
@@ -170,11 +177,22 @@ const notFoundPage = () => ({
   el: EmptyState({ icon: "compass", title: "We couldn't find that page", description: "The link may be broken or the page may have moved.", action: Button({ label: "Go home", variant: "primary", href: "/" }) }),
 });
 
+// The WorkEasy360 launcher opens WorkEasyLMS at /?organization=<uuid>: that always starts a sign-in for the
+// organization the person picked, even over an existing session (integration guide 6a).
+const launchOrganization = new URLSearchParams(location.search).get("organization");
+const launching = isUuid(launchOrganization);
+if (launching) startWorkeasy360SignIn({ organization: launchOrganization.toLowerCase() });
+
 // Demo shortcut: index.html?as=instructor signs in as that role (handy for demos and automated checks).
 const asRole = new URLSearchParams(location.search).get("as");
-if (DEMO_ENABLED && asRole && DEMO_USER_BY_ROLE[asRole]) {
+if (!launching && DEMO_ENABLED && asRole && DEMO_USER_BY_ROLE[asRole]) {
   login(DEMO_USER_BY_ROLE[asRole]); // instant local session so the app boots even if the backend is down
   loginReal(DEMO_EMAIL_BY_ROLE[asRole], DEMO_PASSWORD).catch((err) => console.warn("[boot] backend unavailable:", err.message));
+} else if (!launching && !getToken()) {
+  // A WorkEasy360 session lives in an httpOnly cookie script cannot see: ask the backend whether there is one (bounded,
+  // so an unreachable backend never holds the page), and what its sign-in page offers.
+  const [restored] = await Promise.all([restoreWorkeasy360Session(), loadSsoConfig()]);
+  if (restored) clearAutoStart();
 }
 
 initShell();

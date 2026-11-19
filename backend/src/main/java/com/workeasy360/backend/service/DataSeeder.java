@@ -24,6 +24,7 @@ import java.util.Map;
  * dashboards look populated immediately. Guarded by app.seed.enabled and only runs once (skips if users exist).
  */
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "lms.operator-mode", havingValue = "false", matchIfMissing = true) // not for `w360sso` commands
 @Order(100)
 public class DataSeeder implements CommandLineRunner {
     private final UserRepo users;

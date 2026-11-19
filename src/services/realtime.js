@@ -6,7 +6,7 @@
 //
 // Connection lifecycle: starts on sign-in, stops on sign-out, reconnects with backoff after network interruptions,
 // and re-hydrates everything after each reconnect so nothing announced during the gap is missed.
-import { api, API_BASE, getToken } from "./api.js";
+import { api, API_BASE, getSessionKey } from "./api.js";
 import { bus } from "../lib/events.js";
 import { getUser, isBackendOnline } from "../lib/store.js";
 import { hydrateMyCourses, hydrateCatalog } from "./courseSync.js";
@@ -59,11 +59,11 @@ async function revalidateAll() {
 }
 
 async function connect() {
-  if (!getUser() || !getToken() || !isBackendOnline()) return;
-  const token = getToken();
+  if (!getUser() || !getSessionKey() || !isBackendOnline()) return;
+  const token = getSessionKey();
   let ticket;
   try { ticket = (await api.syncTicket()).ticket; } catch (err) { scheduleRetry(); return; }
-  if (getToken() !== token || !getUser()) return; // signed out while fetching the ticket
+  if (getSessionKey() !== token || !getUser()) return; // signed out while fetching the ticket
 
   const es = new EventSource(`${API_BASE}/sync/stream?ticket=${encodeURIComponent(ticket)}`);
   source = es;
@@ -83,7 +83,7 @@ async function connect() {
   es.onerror = () => {
     es.close();
     if (source === es) source = null;
-    if (getUser() && getToken()) scheduleRetry();
+    if (getUser() && getSessionKey()) scheduleRetry();
   };
 }
 
@@ -103,7 +103,7 @@ export function stopRealtime() {
 }
 
 export function startRealtime() {
-  const token = getToken();
+  const token = getSessionKey();
   if (!getUser() || !token || !isBackendOnline()) { stopRealtime(); return; }
   if (source && startedForToken === token) return; // already streaming for this session
   stopRealtime();
@@ -119,7 +119,7 @@ startRealtime();
 if (typeof window !== "undefined") {
   window.addEventListener("offline", () => { clearTimeout(retryTimer); if (source) { source.close(); source = null; } });
   window.addEventListener("online", () => {
-    if (!getUser() || !getToken()) return;
+    if (!getUser() || !getSessionKey()) return;
     stopRealtime();
     revalidateOnOpen = true;
     connect();
